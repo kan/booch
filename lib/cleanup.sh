@@ -7,7 +7,7 @@
 #   source "$BOOCH_ROOT/lib/cleanup.sh"
 #   before=$(booch_cleanup_disk_avail)
 #   booch_cleanup_run sudo apt-get autoremove -y
-#   booch_docker_prune_safe common builder
+#   booch_cleanup_docker_prune_safe common builder
 #   booch_cleanup_report_freed "$before"
 #
 # 依存: df, sed, tr, numfmt, docker（prune 時）。色は lib/color.sh（未定義でも空で動く）。
@@ -28,27 +28,28 @@ booch_cleanup_disk_avail() {
   df -k --output=avail / 2>/dev/null | tail -1 | tr -d ' '
 }
 
-# before（booch_cleanup_disk_avail の戻り値）からの解放容量を表示する。
+# KB 値を人間可読（base-1024、df -h と同等）に整形する。numfmt 不在時は K 表記。
+_booch_cleanup_iec() { numfmt --to=iec $(($1 * 1024)) 2>/dev/null || echo "${1}K"; }
+
+# before（booch_cleanup_disk_avail の戻り値）からの解放容量を表示する。空き表示は after を
+# 再利用する（2 度目の df を打たず、Freed 値と同じ計測に揃える）。
 booch_cleanup_report_freed() { # before_kb
-  local before=$1 after freed_kb freed_h
+  local before=$1 after freed_kb sign="" abs
   after=$(booch_cleanup_disk_avail)
   case "$before" in '' | *[!0-9]*) before=0 ;; esac
   case "$after" in '' | *[!0-9]*) after=0 ;; esac
   freed_kb=$((after - before))
-  if [ "$freed_kb" -ge 0 ]; then
-    freed_h=$(numfmt --to=iec $((freed_kb * 1024)) 2>/dev/null || echo "${freed_kb}K")
-  else
-    freed_h="-$(numfmt --to=iec $((-freed_kb * 1024)) 2>/dev/null || echo "${freed_kb#-}K")"
-  fi
-  printf 'Freed: %s (/ now has %s available)\n' "$freed_h" \
-    "$(df -h --output=avail / 2>/dev/null | tail -1 | tr -d ' ')"
+  abs=$freed_kb
+  [ "$freed_kb" -lt 0 ] && { sign="-"; abs=$((-freed_kb)); }
+  printf 'Freed: %s%s (/ now has %s available)\n' \
+    "$sign" "$(_booch_cleanup_iec "$abs")" "$(_booch_cleanup_iec "$after")"
 }
 
 # docker の安全な prune（停止コンテナ・dangling イメージ・接続数 0 のネットワーク）。
 # excluded_networks_regex: 既定ネット（bridge|host|none）に加えて除外するネットワーク名の
 #   grep -vxE パターン（例: common）。with_builder に builder を渡すとビルドキャッシュも削除。
 # docker 不在/未起動なら何もしない。DB volume や未使用タグ付きイメージは自動削除しない。
-booch_docker_prune_safe() { # [excluded_networks_regex] [with_builder]
+booch_cleanup_docker_prune_safe() { # [excluded_networks_regex] [with_builder]
   local excl=${1:-} with=${2:-}
   if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
     echo "  (docker unavailable, skip)"

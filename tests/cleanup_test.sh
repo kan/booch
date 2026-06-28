@@ -41,10 +41,10 @@ test_report_freed_negative_uses_minus() {
   assert_contains "$(booch_cleanup_report_freed 1000)" "-"
 }
 
-# --- booch_docker_prune_safe ---
+# --- booch_cleanup_docker_prune_safe ---
 test_docker_prune_skips_when_unavailable() {
   command() { return 1; }   # docker 不在
-  assert_contains "$(booch_docker_prune_safe)" "docker unavailable"
+  assert_contains "$(booch_cleanup_docker_prune_safe)" "docker unavailable"
 }
 
 test_docker_prune_runs_prunes_when_available() {
@@ -52,7 +52,7 @@ test_docker_prune_runs_prunes_when_available() {
   command() { case "$2" in docker) return 0 ;; *) builtin command "$@" ;; esac; }
   docker() { case "$1" in info) return 0 ;; system) echo "df"; ;; *) echo "docker $*" ;; esac; }
   sh() { :; }   # network 削除ループは no-op
-  local out; out=$(booch_docker_prune_safe common)
+  local out; out=$(booch_cleanup_docker_prune_safe common)
   assert_contains "$out" "docker container prune"
   assert_contains "$out" "docker image prune"
 }
@@ -62,7 +62,7 @@ test_docker_prune_with_builder() {
   command() { case "$2" in docker) return 0 ;; *) builtin command "$@" ;; esac; }
   docker() { case "$1" in info) return 0 ;; *) echo "docker $*" ;; esac; }
   sh() { :; }
-  local out; out=$(booch_docker_prune_safe common builder)
+  local out; out=$(booch_cleanup_docker_prune_safe common builder)
   assert_contains "$out" "docker builder prune"
 }
 

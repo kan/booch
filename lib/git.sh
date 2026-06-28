@@ -38,16 +38,18 @@ booch_git_pull_ff_clean() { # repo_dir [branches_csv]
       "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$branch"
     return 0
   fi
+  # LC_ALL=C で git の出力を英語に固定し、"Already up to date" 判定を locale 非依存にする
+  # （ja_JP 等では翻訳されて判定が崩れるため）。一致は bash の組込みで（grep フォーク不要）。
   local out
-  if out=$(git -C "$dir" pull --ff-only 2>&1); then
-    if printf '%s' "$out" | grep -q "Already up to date"; then
+  if out=$(LC_ALL=C git -C "$dir" pull --ff-only 2>&1); then
+    if [[ $out == *"Already up to date"* ]]; then
       printf '%s=%s up to date (%s)\n' "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$branch"
     else
       printf '%s^%s updated (%s)\n' "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$branch"
     fi
   else
     printf '%s[WARN]%s pull failed (%s): %s\n' \
-      "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$branch" "$(printf '%s' "$out" | tail -1)"
+      "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$branch" "${out##*$'\n'}"
   fi
   return 0
 }
