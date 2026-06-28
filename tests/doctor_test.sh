@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # lib/doctor.sh のユニットテスト。描画は文字列として、集計・終了コードは状態として検証する。
 
+# stub（command/dpkg 等）は間接呼び出しで shellcheck から到達不能に見える
+# shellcheck disable=SC2317
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -156,6 +158,66 @@ test_doctor_no_color_when_NO_COLOR_set() {
     booch_doctor_init
     booch_doctor_row "go" missing "x"')
   assert_not_contains "$out" $'\033['
+}
+
+# --- booch_doctor_prefetch ---
+test_prefetch_roundtrip() {
+  booch_doctor_prefetch_init
+  booch_doctor_prefetch foo echo hello
+  booch_doctor_prefetch_wait
+  assert_eq "hello" "$(booch_doctor_prefetch_get foo)"
+  booch_doctor_prefetch_cleanup
+}
+
+# パイプラインは bash -c で 1 コマンドとして渡せる。
+test_prefetch_pipeline_and_multiple() {
+  booch_doctor_prefetch_init
+  booch_doctor_prefetch a echo first
+  booch_doctor_prefetch b bash -c 'echo "x y" | cut -d" " -f2'
+  booch_doctor_prefetch_wait
+  assert_eq "first" "$(booch_doctor_prefetch_get a)"
+  assert_eq "y" "$(booch_doctor_prefetch_get b)"
+  booch_doctor_prefetch_cleanup
+}
+
+# cleanup 後は temp ディレクトリが消える。
+test_prefetch_cleanup_removes_dir() {
+  booch_doctor_prefetch_init
+  local dir=$BOOCH_DOCTOR_PREFETCH_DIR
+  booch_doctor_prefetch_cleanup
+  assert_file_absent "$dir"
+}
+
+# --- booch_doctor_apt_pkg（command/dpkg-query/apt-cache/dpkg を seam） ---
+test_doctor_apt_pkg_missing() {
+  booch_doctor_init
+  command() { return 1; }   # コマンド不在
+  assert_contains "$(booch_doctor_apt_pkg git git git)" "[MISSING]"
+}
+
+test_doctor_apt_pkg_ok_when_candidate_not_newer() {
+  booch_doctor_init
+  command() { case "$2" in git) return 0 ;; *) builtin command "$@" ;; esac; }
+  dpkg-query() { echo "1.0"; }
+  apt-cache() { echo "  Candidate: 1.0"; }
+  dpkg() { return 1; }   # compare-versions gt → false
+  local out; out=$(booch_doctor_apt_pkg git git git)
+  assert_contains "$out" "[OK]"
+  assert_not_contains "$out" "update available"
+}
+
+test_doctor_apt_pkg_outdated_when_candidate_newer() {
+  booch_doctor_init
+  command() { case "$2" in git) return 0 ;; *) builtin command "$@" ;; esac; }
+  dpkg-query() { echo "1.0"; }
+  apt-cache() { echo "  Candidate: 2.0"; }
+  dpkg() { return 0; }   # compare-versions gt → true
+  local out; out=$(booch_doctor_apt_pkg git git git)
+  assert_contains "$out" "update available: 2.0"
+  # フラグは別実行で確認する（command substitution はサブシェルで状態が消えるため）。
+  booch_doctor_init
+  booch_doctor_apt_pkg git git git >/dev/null
+  assert_eq "1" "$BOOCH_DOCTOR_OUTDATED"
 }
 
 run_tests

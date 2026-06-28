@@ -117,3 +117,69 @@ booch_doctor_summary() {
     printf 'All tools are up to date.\n'
   fi
 }
+
+# --- リモート最新版の並列取得 ---------------------------------------------------
+# doctor で多数のリモート版を取得する際、temp ディレクトリへ並列に書き込み、自分が起動した
+# PID だけを待つ（bare wait は呼び出し側の他の background ジョブ＝sudo キープアライブ等を
+# 巻き込んで hang しうるため）。どの URL を・どう抽出して・どのツールを診るかは利用側が決める。
+#
+#   booch_doctor_prefetch_init
+#   booch_doctor_prefetch go bash -c 'curl -fsSL ... | head -1'
+#   booch_doctor_prefetch_wait
+#   latest=$(booch_doctor_prefetch_get go)
+#   booch_doctor_prefetch_cleanup
+# パイプライン等は `bash -c '...'` で 1 コマンドとして渡す。
+
+BOOCH_DOCTOR_PREFETCH_DIR=""
+_BOOCH_DOCTOR_PREFETCH_PIDS=()
+
+booch_doctor_prefetch_init() {
+  BOOCH_DOCTOR_PREFETCH_DIR=$(mktemp -d) || return 1
+  _BOOCH_DOCTOR_PREFETCH_PIDS=()
+}
+
+# name で識別する取得を background 起動する（stdout を temp の name へ）。
+booch_doctor_prefetch() { # name cmd...
+  local name=$1; shift
+  "$@" > "$BOOCH_DOCTOR_PREFETCH_DIR/$name" 2>/dev/null &
+  _BOOCH_DOCTOR_PREFETCH_PIDS+=("$!")
+}
+
+# 起動済みの取得（自分の PID のみ）の完了を待つ。
+booch_doctor_prefetch_wait() {
+  [ "${#_BOOCH_DOCTOR_PREFETCH_PIDS[@]}" -gt 0 ] \
+    && wait "${_BOOCH_DOCTOR_PREFETCH_PIDS[@]}" 2>/dev/null
+  return 0
+}
+
+# 取得結果（name）を読む（未取得なら空）。
+booch_doctor_prefetch_get() { # name
+  cat "$BOOCH_DOCTOR_PREFETCH_DIR/$name" 2>/dev/null
+}
+
+# temp ディレクトリを片付ける。
+booch_doctor_prefetch_cleanup() {
+  [ -n "$BOOCH_DOCTOR_PREFETCH_DIR" ] && rm -rf "$BOOCH_DOCTOR_PREFETCH_DIR"
+  BOOCH_DOCTOR_PREFETCH_DIR=""
+  _BOOCH_DOCTOR_PREFETCH_PIDS=()
+}
+
+# apt パッケージの導入状況を 1 行で診断する。candidate が installed より厳密に新しいときだけ
+# outdated とする（サードパーティ repo 無効化で candidate がディストリ版へ落ちた場合に
+# ダウングレードを更新と誤表示しないよう、文字列比較ではなく dpkg のバージョン比較を使う）。
+# どのパッケージを診るかは利用側が決める。
+booch_doctor_apt_pkg() { # label command package
+  local label=$1 cmd=$2 pkg=$3
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    booch_doctor_row "$label" missing
+    return
+  fi
+  local installed candidate
+  installed=$(dpkg-query -W -f='${Version}' "$pkg" 2>/dev/null || echo "unknown")
+  candidate=$(apt-cache policy "$pkg" 2>/dev/null | awk '/Candidate:/{print $2}')
+  if [ -n "$candidate" ] && dpkg --compare-versions "$candidate" gt "$installed" 2>/dev/null; then
+    booch_doctor_row "$label" outdated "$installed" "$candidate"
+  else
+    booch_doctor_row "$label" ok "$installed"
+  fi
+}
