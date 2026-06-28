@@ -35,6 +35,14 @@ test_ver_norm_all_whitespace() {
 test_ver_norm_multiple_plus() {
   assert_eq "1.2" "$(booch_ver_norm "1.2+a+b")"
 }
+# "1.2.3 (Tool Name)" のような付随語付き --version を最初のトークンに正規化する。
+test_ver_norm_drops_trailing_words() {
+  assert_eq "2.1.195" "$(booch_ver_norm "2.1.195 (Claude Code)")"
+}
+# +build と付随語の両方（"0.1.38646+hash (release)" → "0.1.38646"）。
+test_ver_norm_drops_build_and_words() {
+  assert_eq "0.1.38646" "$(booch_ver_norm "0.1.38646+f96353c (release)")"
+}
 
 # --- booch_doctor_tool 分岐 ---
 test_doctor_tool_missing_when_current_empty() {
