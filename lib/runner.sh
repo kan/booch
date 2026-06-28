@@ -33,18 +33,16 @@ if [ -z "${BOOCH_ROOT:-}" ]; then
   BOOCH_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd) || BOOCH_ROOT=""
 fi
 
-# 色は stdout が tty かつ NO_COLOR 未設定のときだけ使う。パイプ/CI/ログ捕捉
-# （例: `dotfiles 2>&1 | tee log`）でエスケープが混入しないようにする。
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  _BOOCH_C_RED=$'\033[1;31m'
-  _BOOCH_C_YELLOW=$'\033[1;33m'
-  _BOOCH_C_GREEN=$'\033[1;32m'
-  _BOOCH_C_CYAN=$'\033[36m'
-  _BOOCH_C_DIM=$'\033[2m'
-  _BOOCH_C_RESET=$'\033[0m'
+# 色は lib/color.sh に集約（_BOOCH_COLOR_*）。tty/NO_COLOR gate もそこで行う。
+# BOOCH_ROOT が取れていれば source する。color.sh が無い（部分チェックアウト等）ときも
+# 未定義参照で caller の set -u を巻き込まないよう、空で定義しておく（旧インライン版は
+# 常に set だった不変条件を保つ）。
+if [ -n "${BOOCH_ROOT:-}" ] && [ -f "$BOOCH_ROOT/lib/color.sh" ]; then
+  # shellcheck source=/dev/null
+  source "$BOOCH_ROOT/lib/color.sh"
 else
-  _BOOCH_C_RED=''; _BOOCH_C_YELLOW=''; _BOOCH_C_GREEN=''
-  _BOOCH_C_CYAN=''; _BOOCH_C_DIM=''; _BOOCH_C_RESET=''
+  _BOOCH_COLOR_RED=''; _BOOCH_COLOR_YELLOW=''; _BOOCH_COLOR_GREEN=''
+  _BOOCH_COLOR_CYAN=''; _BOOCH_COLOR_DIM=''; _BOOCH_COLOR_RESET=''
 fi
 
 # 各ジョブの既定タイムアウト（秒）。booch_job の第 4 引数で個別上書き可能。
@@ -59,7 +57,7 @@ _booch_timeouts=()
 booch_runner_init() {
   local lib="$BOOCH_ROOT/vendor/bash-concurrent/concurrent.lib.sh"
   if [ ! -f "$lib" ]; then
-    printf '%sERROR:%s vendor が見つかりません: %s\n' "$_BOOCH_C_RED" "$_BOOCH_C_RESET" "$lib" >&2
+    printf '%sERROR:%s vendor が見つかりません: %s\n' "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" "$lib" >&2
     echo "  '$BOOCH_ROOT/vendor/update.sh' を実行して bash-concurrent を取得してください" >&2
     return 1
   fi
@@ -213,19 +211,19 @@ _booch_print_summary() {
       case "$status" in
         installed)
           printf '  %s+%s %-25s %sinstalled%s  %s\n' \
-            "$_BOOCH_C_GREEN" "$_BOOCH_C_RESET" "$tool" "$_BOOCH_C_GREEN" "$_BOOCH_C_RESET" "$new_ver" ;;
+            "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$tool" "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$new_ver" ;;
         updated)
           printf '  %s↑%s %-25s %supdated%s    %s → %s\n' \
-            "$_BOOCH_C_YELLOW" "$_BOOCH_C_RESET" "$tool" "$_BOOCH_C_YELLOW" "$_BOOCH_C_RESET" "$old_ver" "$new_ver" ;;
+            "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$tool" "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$old_ver" "$new_ver" ;;
         current)
           printf '  %s=%s %-25s %slatest%s     %s\n' \
-            "$_BOOCH_C_DIM" "$_BOOCH_C_RESET" "$tool" "$_BOOCH_C_DIM" "$_BOOCH_C_RESET" "$old_ver" ;;
+            "$_BOOCH_COLOR_DIM" "$_BOOCH_COLOR_RESET" "$tool" "$_BOOCH_COLOR_DIM" "$_BOOCH_COLOR_RESET" "$old_ver" ;;
         migrated)
           printf '  %s⇄%s %-25s %smigrated%s   %s → %s\n' \
-            "$_BOOCH_C_CYAN" "$_BOOCH_C_RESET" "$tool" "$_BOOCH_C_CYAN" "$_BOOCH_C_RESET" "$old_ver" "$new_ver" ;;
+            "$_BOOCH_COLOR_CYAN" "$_BOOCH_COLOR_RESET" "$tool" "$_BOOCH_COLOR_CYAN" "$_BOOCH_COLOR_RESET" "$old_ver" "$new_ver" ;;
         failed)
           printf '  %s✗%s %-25s %sfailed%s\n' \
-            "$_BOOCH_C_RED" "$_BOOCH_C_RESET" "$tool" "$_BOOCH_C_RED" "$_BOOCH_C_RESET" ;;
+            "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" "$tool" "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" ;;
       esac
     done < "$f"
   done

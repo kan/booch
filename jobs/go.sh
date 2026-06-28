@@ -6,10 +6,11 @@
 # 内では対話できないため、booch のジョブは非対話に保つ）。
 #
 # 使い方:
+#   source "$BOOCH_ROOT/lib/arch.sh"
 #   source "$BOOCH_ROOT/jobs/go.sh"
 #   booch_job go "Go" job_go 300      # tarball 取得を含むため timeout は長めに
 #
-# 依存: curl, tar, sudo（/usr/local/go へ展開する）, uname。
+# 依存: lib/arch.sh, curl, tar, sudo（/usr/local/go へ展開する）, uname。
 #
 # テスト用の継ぎ目（seam）。次の関数を上書きすると、ネットワーク / sudo 無しで
 # job_go の分岐（installed / updated / current / 失敗）を検証できる:
@@ -28,14 +29,8 @@ booch_go_installed_version() {
   go version | awk '{print $3}'
 }
 
-# 実行アーキテクチャに対応する Go の配布アーキ名（amd64 / arm64）を返す。
-booch_go_arch() {
-  case "$(uname -m)" in
-    x86_64) echo amd64 ;;
-    aarch64 | arm64) echo arm64 ;;
-    *) echo "go: 未対応アーキテクチャ: $(uname -m)" >&2; return 1 ;;
-  esac
-}
+# Go の配布アーキ名（amd64 / arm64）。lib/arch.sh の dpkg 系ラッパー。
+booch_go_arch() { booch_arch_dpkg_style; }
 
 # 指定版を /usr/local/go へ導入する。取得・展開が失敗しても既存の install を
 # 壊さないよう、ステージディレクトリへ展開してから rename で入れ替える（同一

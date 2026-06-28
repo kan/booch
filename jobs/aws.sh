@@ -5,10 +5,11 @@
 # を使う。どちらも x86_64 / aarch64 に対応する。
 #
 # 使い方:
+#   source "$BOOCH_ROOT/lib/arch.sh"
 #   source "$BOOCH_ROOT/jobs/aws.sh"
 #   booch_job aws "AWS CLI + SSM Plugin" job_aws 180
 #
-# 依存: curl, unzip, dpkg, sudo。
+# 依存: lib/arch.sh, curl, unzip, dpkg, sudo。
 #
 # テスト用の継ぎ目（seam）:
 #   booch_aws_arch                       uname → x86_64 / aarch64
@@ -18,13 +19,8 @@
 #   booch_aws_ssm_installed_version      現在の SSM plugin 版（未導入なら空）
 #   booch_aws_ssm_install <arch>         SSM plugin の導入（副作用）
 
-booch_aws_arch() {
-  case "$(uname -m)" in
-    x86_64) printf 'x86_64' ;;
-    aarch64 | arm64) printf 'aarch64' ;;
-    *) echo "aws: 未対応アーキテクチャ: $(uname -m)" >&2; return 1 ;;
-  esac
-}
+# AWS の配布アーキ名（x86_64 / aarch64）。lib/arch.sh の rust 系ラッパー。
+booch_aws_arch() { booch_arch_rust_style; }
 
 # --- AWS CLI v2 ---
 booch_aws_cli_installed_version() {

@@ -2,6 +2,8 @@
 # jobs/aws.sh のユニットテスト。seam をスタブで差し替え、AWS CLI / SSM の分岐と
 # arch / deb-dir の純粋ロジックを検証する（実 install 不要）。
 
+# stub（uname/seam）は間接呼び出しで shellcheck から到達不能に見える
+# shellcheck disable=SC2317
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -10,6 +12,8 @@ export BOOCH_ROOT
 source "$TESTS_DIR/lib.sh"
 # shellcheck source=lib/runner.sh
 source "$BOOCH_ROOT/lib/runner.sh"
+# shellcheck source=lib/arch.sh
+source "$BOOCH_ROOT/lib/arch.sh"
 # shellcheck source=jobs/aws.sh
 source "$BOOCH_ROOT/jobs/aws.sh"
 

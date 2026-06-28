@@ -5,11 +5,12 @@
 # 旧 npm 版（@openai/codex）の撤去は移行残渣なので含めない（利用側の custom に残す）。
 #
 # 使い方:
+#   source "$BOOCH_ROOT/lib/arch.sh"
 #   source "$BOOCH_ROOT/lib/github.sh"
 #   source "$BOOCH_ROOT/jobs/codex.sh"
 #   booch_job codex "Codex CLI" job_codex 120
 #
-# 依存: lib/github.sh, curl, jq, tar, sudo。
+# 依存: lib/arch.sh, lib/github.sh, curl, jq, tar, sudo。
 #
 # テスト用の継ぎ目（seam）:
 #   booch_codex_installed_version  現在の版（未導入なら空）
@@ -28,13 +29,8 @@ booch_codex_latest() {
   booch_github_latest_tag openai/codex
 }
 
-booch_codex_arch() {
-  case "$(uname -m)" in
-    x86_64) printf 'x86_64' ;;
-    aarch64 | arm64) printf 'aarch64' ;;
-    *) echo "codex: 未対応アーキテクチャ: $(uname -m)" >&2; return 1 ;;
-  esac
-}
+# Codex の配布アーキ名（x86_64 / aarch64）。lib/arch.sh の rust 系ラッパー。
+booch_codex_arch() { booch_arch_rust_style; }
 
 # アーカイブ／バイナリの基底名（純粋関数）。資産は "<base>.tar.gz"、展開後の
 # バイナリ名は "<base>"。

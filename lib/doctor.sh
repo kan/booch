@@ -14,17 +14,17 @@
 #
 # 集計状態（公開）: BOOCH_DOCTOR_MISSING / _OUTDATED / _WARN（0/1）
 
-# 色は tty かつ NO_COLOR 未設定のときだけ使う（パイプ / CI / ログ捕捉対策）。
-# NOTE: runner.sh と同じ gating を重複保持している。将来 lib/color.sh へ集約する。
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  _BOOCH_DC_RED=$'\033[1;31m'
-  _BOOCH_DC_YELLOW=$'\033[1;33m'
-  _BOOCH_DC_GREEN=$'\033[1;32m'
-  _BOOCH_DC_DIM=$'\033[2m'
-  _BOOCH_DC_RESET=$'\033[0m'
+# 色は lib/color.sh に集約（_BOOCH_COLOR_*）。BOOCH_ROOT 未設定時は本ファイルから推定。
+if [ -z "${BOOCH_ROOT:-}" ]; then
+  BOOCH_ROOT=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd) || BOOCH_ROOT=""
+fi
+if [ -n "${BOOCH_ROOT:-}" ] && [ -f "$BOOCH_ROOT/lib/color.sh" ]; then
+  # shellcheck source=/dev/null
+  source "$BOOCH_ROOT/lib/color.sh"
 else
-  _BOOCH_DC_RED=''; _BOOCH_DC_YELLOW=''; _BOOCH_DC_GREEN=''
-  _BOOCH_DC_DIM=''; _BOOCH_DC_RESET=''
+  # color.sh が無いときも未定義参照で caller の set -u を巻き込まないよう空で定義する。
+  _BOOCH_COLOR_RED=''; _BOOCH_COLOR_YELLOW=''; _BOOCH_COLOR_GREEN=''
+  _BOOCH_COLOR_CYAN=''; _BOOCH_COLOR_DIM=''; _BOOCH_COLOR_RESET=''
 fi
 
 BOOCH_DOCTOR_MISSING=0
@@ -55,23 +55,23 @@ booch_doctor_row() { # label status [value] [note]
   case "$status" in
     ok)
       printf '  %-30s %s[OK]%s  %s\n' \
-        "$label" "$_BOOCH_DC_GREEN" "$_BOOCH_DC_RESET" "$value" ;;
+        "$label" "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$value" ;;
     outdated)
       printf '  %-30s %s[OK]%s  %-20s %s(update available: %s)%s\n' \
-        "$label" "$_BOOCH_DC_GREEN" "$_BOOCH_DC_RESET" "$value" \
-        "$_BOOCH_DC_YELLOW" "$note" "$_BOOCH_DC_RESET"
+        "$label" "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$value" \
+        "$_BOOCH_COLOR_YELLOW" "$note" "$_BOOCH_COLOR_RESET"
       BOOCH_DOCTOR_OUTDATED=1 ;;
     missing)
       printf '  %-30s %s[MISSING]%s %s\n' \
-        "$label" "$_BOOCH_DC_RED" "$_BOOCH_DC_RESET" "$value"
+        "$label" "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" "$value"
       BOOCH_DOCTOR_MISSING=1 ;;
     warn)
       printf '  %-30s %s[WARN]%s %s\n' \
-        "$label" "$_BOOCH_DC_YELLOW" "$_BOOCH_DC_RESET" "$value"
+        "$label" "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$value"
       BOOCH_DOCTOR_WARN=1 ;;
     skip)
       printf '  %-30s %s[SKIP]%s %s\n' \
-        "$label" "$_BOOCH_DC_DIM" "$_BOOCH_DC_RESET" "$value" ;;
+        "$label" "$_BOOCH_COLOR_DIM" "$_BOOCH_COLOR_RESET" "$value" ;;
     *)
       # 未知 status（呼び出し側のタイポ等）を黙って通すと、欠落が「all good」に
       # 化ける。診断を stderr に出し、警告として集計に残す。
@@ -104,13 +104,13 @@ booch_doctor_tool() { # label current latest
 booch_doctor_summary() {
   # 公開変数を非数値で汚されても落ちないよう、数値比較でなく文字列一致で見る。
   if [ "${BOOCH_DOCTOR_MISSING:-0}" = "1" ]; then
-    printf '%sSome tools are missing.%s\n' "$_BOOCH_DC_RED" "$_BOOCH_DC_RESET"
+    printf '%sSome tools are missing.%s\n' "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET"
     return 1
   elif [ "${BOOCH_DOCTOR_OUTDATED:-0}" = "1" ]; then
-    printf '%sSome tools are outdated.%s\n' "$_BOOCH_DC_YELLOW" "$_BOOCH_DC_RESET"
+    printf '%sSome tools are outdated.%s\n' "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET"
   elif [ "${BOOCH_DOCTOR_WARN:-0}" = "1" ]; then
     printf '%sTools are up to date, but warnings were found.%s\n' \
-      "$_BOOCH_DC_YELLOW" "$_BOOCH_DC_RESET"
+      "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET"
   else
     printf 'All tools are up to date.\n'
   fi

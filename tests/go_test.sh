@@ -2,6 +2,8 @@
 # jobs/go.sh のユニットテスト。継ぎ目（booch_go_*）をスタブで差し替え、
 # ネットワーク / sudo 無しで分岐を検証する。
 
+# stub（uname/seam）は間接呼び出しで shellcheck から到達不能に見える
+# shellcheck disable=SC2317
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -10,6 +12,8 @@ export BOOCH_ROOT
 source "$TESTS_DIR/lib.sh"
 # shellcheck source=lib/runner.sh
 source "$BOOCH_ROOT/lib/runner.sh"
+# shellcheck source=lib/arch.sh
+source "$BOOCH_ROOT/lib/arch.sh"
 # shellcheck source=jobs/go.sh
 source "$BOOCH_ROOT/jobs/go.sh"
 

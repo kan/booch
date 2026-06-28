@@ -15,6 +15,8 @@ dotfiles に残し、booch は汎用部分だけを担う。
 booch/
 ├── lib/
 │   ├── runner.sh                 # 並列ジョブランナー（bash-concurrent 上に構築）
+│   ├── color.sh                  # 色（ANSI）の共通定義（tty/NO_COLOR gate）
+│   ├── arch.sh                   # アーキテクチャ名の解決（dpkg 系 / rust 系）
 │   ├── os.sh                     # OS 検出（os-release → BOOCH_OS_*）
 │   ├── apt.sh                    # APT リポジトリ追加・コードネーム解決
 │   ├── doctor.sh                 # 診断レポートのフレーム（行描画・バージョン比較・集計）

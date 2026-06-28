@@ -6,11 +6,12 @@
 # GitHub Releases から直接取得する。x86_64 / aarch64 対応。
 #
 # 使い方:
+#   source "$BOOCH_ROOT/lib/arch.sh"
 #   source "$BOOCH_ROOT/lib/github.sh"
 #   source "$BOOCH_ROOT/jobs/circleci.sh"
 #   booch_job circleci "CircleCI CLI" job_circleci 120
 #
-# 依存: lib/github.sh, curl, jq, tar, sudo, find。
+# 依存: lib/arch.sh, lib/github.sh, curl, jq, tar, sudo, find。
 #
 # テスト用の継ぎ目（seam）:
 #   booch_circleci_installed_version  現在の版（未導入なら空）
@@ -28,13 +29,8 @@ booch_circleci_latest() {
   booch_github_latest_tag CircleCI-Public/circleci-cli
 }
 
-booch_circleci_arch() {
-  case "$(uname -m)" in
-    x86_64) printf 'amd64' ;;
-    aarch64 | arm64) printf 'arm64' ;;
-    *) echo "circleci: 未対応アーキテクチャ: $(uname -m)" >&2; return 1 ;;
-  esac
-}
+# CircleCI の配布アーキ名（amd64 / arm64）。lib/arch.sh の dpkg 系ラッパー。
+booch_circleci_arch() { booch_arch_dpkg_style; }
 
 # 資産/展開ディレクトリの基底名（純粋関数）。資産は "<base>.tar.gz"、展開後の
 # バイナリは "<base>/circleci"。ver はタグから v を除いた値。
