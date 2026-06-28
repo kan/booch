@@ -26,7 +26,11 @@ booch/
 │   ├── npm.sh                    # ローカル npm プロジェクト同期 / グローバル install
 │   ├── confirm.sh                # 更新確認のフレーム（登録前の y/N 判断・tty プロンプト）
 │   ├── sudo.sh                   # 並列ジョブ向け sudo 事前キャッシュ + キープアライブ
-│   └── fs.sh                     # symlink 配置 / TOML キーの冪等更新
+│   ├── fs.sh                     # symlink 配置 / TOML キーの冪等更新
+│   ├── git.sh                    # 自己更新（pull→再exec）/ 複数リポジトリの ff-only pull
+│   ├── cleanup.sh                # cleanup フレーム（コマンド実行表示 / 解放量 / docker 安全 prune）
+│   ├── wsl.sh                    # WSL 判定 / binfmt interop 診断
+│   └── docker.sh                 # docker post-install（グループ / デーモン / 再ログイン案内）
 ├── jobs/
 │   ├── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新
 │   ├── delta.sh                  # 提供ジョブ: delta (git pager) の導入 / 更新
