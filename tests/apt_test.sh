@@ -246,4 +246,90 @@ test_apt_warn_autoremove_treats_nonnumeric_as_zero() {
   assert_status 0 "$rc"
 }
 
+# --- booch_apt_sync（sudo/upgrade/warn を seam で制御） ---
+# stub は間接呼び出しで shellcheck から到達不能に見える
+# shellcheck disable=SC2317
+test_apt_sync_returns_1_when_update_fails() {
+  sudo() { case "$2" in update) return 1 ;; *) return 0 ;; esac; }
+  booch_apt_upgrade() { return 0; }
+  booch_apt_warn_autoremove() { return 0; }
+  local rc; if booch_apt_sync git >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+
+test_apt_sync_returns_1_when_install_fails() {
+  sudo() { case "$2" in install) return 1 ;; *) return 0 ;; esac; }
+  booch_apt_upgrade() { return 0; }
+  booch_apt_warn_autoremove() { return 0; }
+  local rc; if booch_apt_sync git >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+
+# upgrade 失敗は best-effort（全体は成功）。
+test_apt_sync_tolerates_upgrade_failure() {
+  sudo() { return 0; }
+  booch_apt_upgrade() { return 1; }
+  booch_apt_warn_autoremove() { return 0; }
+  local rc; if booch_apt_sync git >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+# --- booch_apt_add_ppa（temp の sources.d / add-apt-repository を seam） ---
+test_apt_add_ppa_skips_when_present() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  echo "deb http://ppa.example/git-core/ppa ..." > "$BOOCH_APT_SOURCES_DIR/git.list"
+  local added=0
+  sudo() { added=1; }
+  booch_apt_add_ppa ppa:git-core/ppa >/dev/null 2>&1
+  assert_eq "0" "$added" "既存なら add-apt-repository を呼ばない"
+  rm -rf "$BOOCH_APT_SOURCES_DIR"
+}
+
+test_apt_add_ppa_adds_when_absent() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  local got=""
+  sudo() { shift; got="$*"; }   # "add-apt-repository -y ppa:..." の add-apt-repository 以降
+  booch_apt_add_ppa ppa:git-core/ppa >/dev/null 2>&1
+  assert_contains "$got" "ppa:git-core/ppa"
+  rm -rf "$BOOCH_APT_SOURCES_DIR"
+}
+
+# 追加失敗 + allow_fail なら 0、無しなら 1。
+test_apt_add_ppa_fail_open_with_allow_fail() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  sudo() { return 1; }
+  local rc; if booch_apt_add_ppa ppa:x/y "x/y" allow_fail >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  rm -rf "$BOOCH_APT_SOURCES_DIR"
+}
+
+test_apt_add_ppa_fail_closed_by_default() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  sudo() { return 1; }
+  local rc; if booch_apt_add_ppa ppa:x/y >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  rm -rf "$BOOCH_APT_SOURCES_DIR"
+}
+
+# --- booch_apt_pin_origin（temp の preferences.d） ---
+test_apt_pin_origin_writes_file() {
+  BOOCH_APT_PREFERENCES_DIR=$(mktemp -d)
+  sudo() { "$@"; }   # tee を sudo 無しで実行
+  booch_apt_pin_origin nodesource nodejs deb.nodesource.com 600
+  local f="$BOOCH_APT_PREFERENCES_DIR/nodesource"
+  assert_contains "$(cat "$f")" "Package: nodejs"
+  assert_contains "$(cat "$f")" "Pin: origin deb.nodesource.com"
+  assert_contains "$(cat "$f")" "Pin-Priority: 600"
+  rm -rf "$BOOCH_APT_PREFERENCES_DIR"
+}
+
+test_apt_pin_origin_skips_when_present() {
+  BOOCH_APT_PREFERENCES_DIR=$(mktemp -d)
+  echo "existing" > "$BOOCH_APT_PREFERENCES_DIR/nodesource"
+  sudo() { "$@"; }
+  booch_apt_pin_origin nodesource nodejs deb.nodesource.com 600
+  assert_eq "existing" "$(cat "$BOOCH_APT_PREFERENCES_DIR/nodesource")"
+  rm -rf "$BOOCH_APT_PREFERENCES_DIR"
+}
+
 run_tests

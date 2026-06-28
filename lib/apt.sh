@@ -146,3 +146,48 @@ booch_apt_warn_autoremove() {
   printf '  実行: sudo apt autoremove\n' >&2
   return 1
 }
+
+# preferences.d の場所（テストで temp に差し替えられる）。
+: "${BOOCH_APT_PREFERENCES_DIR:=/etc/apt/preferences.d}"
+# 色（color.sh 未 source でも set -u を巻き込まないよう空で用意する。add_ppa の警告で使う）。
+: "${_BOOCH_COLOR_YELLOW:=}" "${_BOOCH_COLOR_RESET:=}"
+
+# apt を更新し必須パッケージを導入する。update / install の失敗は致命的（非 0 を返す）、
+# upgrade は best-effort（一部失敗しても続行）。最後に autoremove 警告を出す（戻り値には
+# 影響しない）。どのパッケージを入れるかは利用側が決める。
+# 注意: update/install 失敗で非 0 を返すので、caller は `booch_apt_sync ... || halt` で受ける。
+booch_apt_upgrade() { sudo apt-get upgrade -y; }   # seam
+booch_apt_sync() { # pkg...
+  sudo apt-get update || return 1
+  booch_apt_upgrade || echo "  [WARN] apt upgrade に一部失敗しました（続行します）" >&2
+  sudo apt-get install -y "$@" || return 1
+  booch_apt_warn_autoremove || true
+}
+
+# add-apt-repository 系の PPA を追加する（鍵 + deb の keyring パターンの booch_apt_add_repo
+# とは別系統）。grep_pattern（既定: "ppa:" を除いた owner/repo）が sources.list.d に既にあれば
+# スキップ。allow_fail を真にすると追加失敗を警告だけして続行する（新リリース直後に当該
+# コードネーム向けが未公開なケース）。どの PPA を使うか・失敗許容かは利用側が決める。
+booch_apt_add_ppa() { # ppa [grep_pattern] [allow_fail]
+  local ppa=$1 pat=${2:-${1#ppa:}} allow_fail=${3:-}
+  grep -rq "$pat" "$BOOCH_APT_SOURCES_DIR/" 2>/dev/null && return 0
+  echo "Adding PPA: $ppa"
+  if ! sudo add-apt-repository -y "$ppa"; then
+    case "$allow_fail" in
+      true | yes | 1 | allow_fail)
+        printf '%s[WARN]%s PPA %s を追加できませんでした（続行します）\n' \
+          "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$ppa" >&2
+        return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+}
+
+# preferences.d/<name> に origin pin を書く（ディストリ版が指定 origin の版を上書きしない
+# ようにする）。既にあれば何もしない。pin 対象の package / origin / priority は利用側が決める。
+booch_apt_pin_origin() { # name package origin priority
+  local name=$1 package=$2 origin=$3 priority=$4
+  [ -f "$BOOCH_APT_PREFERENCES_DIR/$name" ] && return 0
+  printf 'Package: %s\nPin: origin %s\nPin-Priority: %s\n' "$package" "$origin" "$priority" \
+    | sudo tee "$BOOCH_APT_PREFERENCES_DIR/$name" > /dev/null
+}
