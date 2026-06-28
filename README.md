@@ -21,7 +21,8 @@ booch/
 │   └── github.sh                 # GitHub Releases（最新タグ取得・資産ダウンロード）
 ├── jobs/
 │   ├── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新
-│   └── delta.sh                  # 提供ジョブ: delta (git pager) の導入 / 更新
+│   ├── delta.sh                  # 提供ジョブ: delta (git pager) の導入 / 更新
+│   └── codex.sh                  # 提供ジョブ: Codex CLI の導入 / 更新
 ├── vendor/
 │   ├── bash-concurrent/          # 並列実行ライブラリ（MIT, vendoring してコミット）
 │   └── update.sh                 # vendor 更新スクリプト（メンテ用）
