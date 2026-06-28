@@ -91,13 +91,13 @@ booch_git_self_update() {
   fetch_status=$?
   if [ "$fetch_status" -ne 0 ]; then
     printf '%sError:%s failed to fetch; aborting.\n' "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" >&2
+    echo "  (check your SSH agent / credentials / network connectivity)" >&2
     [ -n "$fetch_err" ] && echo "  git fetch: $fetch_err" >&2
     exit 1
   fi
   local counts ahead behind
   counts=$(git -C "$dir" rev-list --left-right --count "HEAD...@{u}" 2>/dev/null || echo "0 0")
-  ahead=$(echo "$counts" | awk '{print $1}')
-  behind=$(echo "$counts" | awk '{print $2}')
+  read -r ahead behind <<<"$counts"
   if [ "$behind" -gt 0 ] && [ "$ahead" -gt 0 ]; then
     echo "Diverged: local ahead ${ahead}, remote ahead ${behind}. Resolve manually (rebase/merge)."
   elif [ "$behind" -gt 0 ]; then

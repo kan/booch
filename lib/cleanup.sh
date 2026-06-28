@@ -64,4 +64,5 @@ booch_docker_prune_safe() { # [excluded_networks_regex] [with_builder]
   [ "$with" = builder ] && booch_cleanup_run docker builder prune -f
   echo "  docker disk usage:"
   docker system df 2>/dev/null | sed 's/^/    /'
+  echo "  hint: unused tagged images -> 'docker image prune -af'; unused volumes (DBs! careful) -> 'docker volume prune -f'"
 }

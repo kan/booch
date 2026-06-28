@@ -154,6 +154,7 @@ booch_doctor_prefetch_wait() {
 
 # 取得結果（name）を読む（未取得なら空）。
 booch_doctor_prefetch_get() { # name
+  local name=$1
   cat "$BOOCH_DOCTOR_PREFETCH_DIR/$name" 2>/dev/null
 }
 

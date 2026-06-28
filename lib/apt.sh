@@ -170,11 +170,12 @@ booch_apt_sync() { # pkg...
 # コードネーム向けが未公開なケース）。どの PPA を使うか・失敗許容かは利用側が決める。
 booch_apt_add_ppa() { # ppa [grep_pattern] [allow_fail]
   local ppa=$1 pat=${2:-${1#ppa:}} allow_fail=${3:-}
-  grep -rq "$pat" "$BOOCH_APT_SOURCES_DIR/" 2>/dev/null && return 0
+  # -F: パターンは固定文字列（owner/repo 等）として扱う（メタ文字を含む PPA 名で誤判定しない）。
+  grep -rqF "$pat" "$BOOCH_APT_SOURCES_DIR/" 2>/dev/null && return 0
   echo "Adding PPA: $ppa"
   if ! sudo add-apt-repository -y "$ppa"; then
     case "$allow_fail" in
-      true | yes | 1 | allow_fail)
+      true | yes | 1)
         printf '%s[WARN]%s PPA %s を追加できませんでした（続行します）\n' \
           "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$ppa" >&2
         return 0 ;;

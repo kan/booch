@@ -298,7 +298,7 @@ test_apt_add_ppa_adds_when_absent() {
 test_apt_add_ppa_fail_open_with_allow_fail() {
   BOOCH_APT_SOURCES_DIR=$(mktemp -d)
   sudo() { return 1; }
-  local rc; if booch_apt_add_ppa ppa:x/y "x/y" allow_fail >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  local rc; if booch_apt_add_ppa ppa:x/y "x/y" true >/dev/null 2>&1; then rc=0; else rc=$?; fi
   assert_status 0 "$rc"
   rm -rf "$BOOCH_APT_SOURCES_DIR"
 }

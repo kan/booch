@@ -57,4 +57,13 @@ test_docker_prune_runs_prunes_when_available() {
   assert_contains "$out" "docker image prune"
 }
 
+# with_builder=builder でビルドキャッシュ prune も走る。
+test_docker_prune_with_builder() {
+  command() { case "$2" in docker) return 0 ;; *) builtin command "$@" ;; esac; }
+  docker() { case "$1" in info) return 0 ;; *) echo "docker $*" ;; esac; }
+  sh() { :; }
+  local out; out=$(booch_docker_prune_safe common builder)
+  assert_contains "$out" "docker builder prune"
+}
+
 run_tests
