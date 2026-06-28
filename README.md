@@ -19,7 +19,8 @@ booch/
 │   ├── apt.sh                    # APT リポジトリ追加・コードネーム解決
 │   ├── doctor.sh                 # 診断レポートのフレーム（行描画・バージョン比較・集計）
 │   ├── github.sh                 # GitHub Releases（最新タグ取得・資産ダウンロード）
-│   └── uv.sh                     # uv 本体と uv tool の冪等な導入 / 更新
+│   ├── uv.sh                     # uv 本体と uv tool の冪等な導入 / 更新
+│   └── claude.sh                 # Claude Code 本体 / marketplace / plugin の冪等な導入・更新
 ├── jobs/
 │   ├── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新
 │   ├── delta.sh                  # 提供ジョブ: delta (git pager) の導入 / 更新
