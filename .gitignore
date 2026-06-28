@@ -1,0 +1,3 @@
+# bash-concurrent が既定で吐くログ出力先（runner は temp に逃がすが念のため）
+.logs/
+*.tmp

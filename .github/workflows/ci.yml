@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash syntax check
+        run: bash -n lib/runner.sh vendor/update.sh examples/demo.sh tests/*.sh
+
+      # shellcheck は ubuntu-latest ランナーにプリインストールされている。
+      - name: shellcheck
+        run: shellcheck -x lib/runner.sh vendor/update.sh examples/demo.sh tests/*.sh
+
+      - name: unit tests
+        run: bash tests/run.sh
+
+      # demo は失敗ジョブ・timeout を含むため exit 1 が正しい挙動。
+      # その exit 1 を期待結果として検証する（クラッシュとは区別する）。
+      - name: demo smoke
+        run: |
+          if out=$(bash examples/demo.sh 2>&1); then rc=0; else rc=$?; fi
+          printf '%s\n' "$out"
+          test "$rc" -eq 1
+          printf '%s\n' "$out" | grep -q "Tool Summary"

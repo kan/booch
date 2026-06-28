@@ -1,0 +1,101 @@
+# booch
+
+WSL2 / Ubuntu 向けの、再実行可能な開発環境ブートストラップ基盤（Bash 製）。
+
+ツールのインストール定義（job）を並列実行し、進捗と結果をまとめて表示する。
+dotfiles スクリプトに混ざりがちな汎用的な導入や更新の処理を切り出して共有することを
+狙う。個人固有の設定（symlink、トークン、プロジェクトの pull など）は利用側の
+dotfiles に残し、booch は汎用部分だけを担う。
+
+> 開発初期段階。まずコア（並列ジョブランナー）から実装している。
+
+## 構成
+
+```
+booch/
+├── lib/
+│   └── runner.sh                 # 並列ジョブランナー（bash-concurrent 上に構築）
+├── vendor/
+│   ├── bash-concurrent/          # 並列実行ライブラリ（MIT, vendoring してコミット）
+│   └── update.sh                 # vendor 更新スクリプト（メンテ用）
+└── examples/
+    └── demo.sh                   # runner.sh のスモークテスト兼デモ
+```
+
+## 前提
+
+- bash >= 4.2（bash-concurrent が `declare -g` を要求する）
+- GNU coreutils（`readlink -f` / `timeout --foreground --kill-after` / `mktemp -d`）、
+  および bash-concurrent が使う `cat` `cp` `date` `mkdir` `mkfifo` `mktemp` `mv`
+  `sed` `tail` `tput`
+
+WSL2 / Ubuntu を主対象とする。BSD / macOS の `readlink` と `timeout` はオプションが
+非互換のため、そのままでは動かない。
+
+## 使い方
+
+[bash-concurrent](https://github.com/themattrix/bash-concurrent) を土台に、
+ジョブ単位のタイムアウトと実行後サマリー（installed / updated / current / migrated /
+failed）を加えた薄い層が `lib/runner.sh` である。スピナー、経過秒、失敗ログの表示、
+終了コードは bash-concurrent が担当する。
+
+`runner.sh` を source し、ジョブを関数として登録して並列実行する。
+
+```bash
+export BOOCH_ROOT=/path/to/booch
+source "$BOOCH_ROOT/lib/runner.sh"
+booch_runner_init
+
+job_go() {
+  booch_status "downloading..."        # 実行中の 1 行ステータスを更新する
+  # ... 導入処理 ...
+  booch_result "Go" updated 1.22 1.23   # サマリーに 1 行を記録する
+}
+
+booch_job go "Go + tools" job_go 120    # name label fn [timeout秒]
+booch_run                                # 並列実行してサマリーを表示する
+```
+
+### API
+
+| 関数 | 役割 |
+|---|---|
+| `booch_runner_init` | vendor を読み込み、結果記録用の領域を用意する |
+| `booch_job NAME LABEL FN [TIMEOUT]` | ジョブを登録する。`NAME` は一意、`TIMEOUT` 秒は省略時 120、`0` で無効 |
+| `booch_run` | 登録済みジョブを並列実行し、サマリーを表示する |
+| `booch_status MSG` | ジョブ関数内から実行中の 1 行ステータスを更新する |
+| `booch_result TOOL STATUS [OLD] [NEW]` | ジョブ関数内からサマリー行を記録する（`STATUS`: installed / updated / current / migrated / failed） |
+
+ジョブ関数は exported 変数と関数定義だけに依存できる（別プロセスで実行されるため）。
+詳細は `CLAUDE.md` を参照。
+
+### デモ
+
+```bash
+bash examples/demo.sh
+```
+
+正常終了、実行中ステータスの更新、サマリー各種、失敗ジョブのログ表示、タイムアウトを
+ひととおり確認できる。
+
+## テスト
+
+外部依存のないユニットテストを `tests/` に置く。
+
+```bash
+bash tests/run.sh
+```
+
+GitHub Actions（`.github/workflows/ci.yml`）が push と pull request ごとに、構文
+チェック・shellcheck・ユニットテスト・デモのスモークを実行する。
+
+## vendor の更新
+
+bash-concurrent は vendor 方式でリポジトリにコミットしている。版を上げるときは
+`vendor/update.sh` 内の PIN / SHA256 を書き換えて実行し、差分をコミットする。取得した
+ファイルは sha256 で検証する。
+
+## ライセンス
+
+MIT（`LICENSE`）。`vendor/bash-concurrent/` は upstream の MIT ライセンス
+（`vendor/bash-concurrent/LICENSE`）に従う。
