@@ -16,7 +16,8 @@ booch/
 ├── lib/
 │   ├── runner.sh                 # 並列ジョブランナー（bash-concurrent 上に構築）
 │   ├── os.sh                     # OS 検出（os-release → BOOCH_OS_*）
-│   └── apt.sh                    # APT リポジトリ追加・コードネーム解決
+│   ├── apt.sh                    # APT リポジトリ追加・コードネーム解決
+│   └── doctor.sh                 # 診断レポートのフレーム（行描画・バージョン比較・集計）
 ├── jobs/
 │   └── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新
 ├── vendor/
