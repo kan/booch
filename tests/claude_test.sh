@@ -61,6 +61,10 @@ test_claude_installed_version_empty_when_absent() {
   BOOCH_CLAUDE_BIN="/nonexistent/claude"
   assert_eq "" "$(booch_claude_installed_version)"
 }
+# runner の bash -c 子（ジョブ）に伝わるよう BOOCH_CLAUDE_BIN は export されている。
+test_claude_bin_is_exported() {
+  assert_eq "$BOOCH_CLAUDE_BIN" "$(bash -c 'printf %s "${BOOCH_CLAUDE_BIN:-UNSET}"')"
+}
 
 # --- marketplace ---
 test_claude_marketplace_ensure_skips_when_present() {

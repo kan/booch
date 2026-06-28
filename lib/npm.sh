@@ -23,7 +23,10 @@
 #   booch_npm_present          npm が PATH にあるか（利用側が事前確認に使う）
 #   booch_npm_run <args...>    npm を実行
 
+# runner の bash -c 子（ジョブ）から参照できるよう export する（非 export だと
+# ジョブ内で空になり global install の --prefix が壊れる）。
 : "${BOOCH_NPM_PREFIX:=$HOME/.local}"
+export BOOCH_NPM_PREFIX
 
 booch_npm_present() { command -v npm >/dev/null 2>&1; }
 booch_npm_run() { npm "$@"; }

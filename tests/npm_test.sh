@@ -77,5 +77,9 @@ test_npm_global_ensure_uses_prefix() {
   booch_npm_global_ensure typescript-language-server typescript
   assert_eq "install -g --prefix /tmp/booch-npm-prefix typescript-language-server typescript" "$cap"
 }
+# runner の bash -c 子（ジョブ）に伝わるよう BOOCH_NPM_PREFIX は export されている。
+test_npm_prefix_is_exported() {
+  assert_eq "$BOOCH_NPM_PREFIX" "$(bash -c 'printf %s "${BOOCH_NPM_PREFIX:-UNSET}"')"
+}
 
 run_tests

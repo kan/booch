@@ -19,7 +19,10 @@
 #   booch_claude_run <args...>     固定した claude バイナリを実行（read/write 共通）
 #   booch_claude_install_script    本体インストーラ（install.sh）の実行
 
+# runner の bash -c 子（ジョブ）から参照できるよう export する。非 export だと
+# ジョブ内で空になり、install/marketplace/plugin 操作がすべて空パスで壊れる。
 : "${BOOCH_CLAUDE_BIN:=$HOME/.local/bin/claude}"
+export BOOCH_CLAUDE_BIN
 
 booch_claude_run() { "$BOOCH_CLAUDE_BIN" "$@"; }
 

@@ -108,6 +108,15 @@ test_uv_tool_ensure_installs_without_python() {
   booch_uv_tool_ensure ruff
   assert_eq "ruff" "$inst_args"
 }
+# 第3引数 force で install に --force が付く（pipx 等の他管理実行ファイル上書き用）。
+test_uv_tool_ensure_force_passes_force_flag() {
+  booch_uv_tool_installed() { return 1; }
+  local inst_args="__unset__"
+  booch_uv_tool_install() { inst_args="$*"; }
+  booch_uv_tool_upgrade() { :; }
+  booch_uv_tool_ensure ansible-core 3.12 force
+  assert_eq "--force --python 3.12 ansible-core" "$inst_args"
+}
 
 # --- booch_uv_installed_version ---
 test_uv_installed_version_parses() {
