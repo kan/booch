@@ -53,6 +53,68 @@ test_go_fails_when_latest_unavailable() {
   assert_file_absent "$BOOCH_RESULT_DIR/go.result"
 }
 
+# --- booch_go_tools_ensure（BOOCH_GO_TOOLS の go install）。seam をスタブ ---
+# BOOCH_GO_TOOLS 未設定なら何もしない（go.result が生まれない）。
+test_go_tools_noop_when_unset() {
+  booch_runner_init
+  export BOOCH_JOB=go
+  unset BOOCH_GO_TOOLS
+  booch_go_tools_ensure
+  assert_file_absent "$BOOCH_RESULT_DIR/go.result"
+}
+
+# 未導入のツールは installed、basename で記録する。
+test_go_tools_installs_by_basename() {
+  booch_runner_init
+  export BOOCH_JOB=go
+  export BOOCH_GO_TOOLS="github.com/justjanne/powerline-go"
+  booch_go_tool_install() { :; }
+  local _calls=0
+  booch_go_tool_version() { _calls=$((_calls+1)); [ "$_calls" -le 1 ] && printf '' || printf 'v1.2.3'; }
+  booch_go_tools_ensure
+  assert_eq "powerline-go|installed||v1.2.3" "$(cat "$BOOCH_RESULT_DIR/go.result")"
+  unset BOOCH_GO_TOOLS
+}
+
+# 版が変わると updated。
+test_go_tools_updates_when_version_changes() {
+  booch_runner_init
+  export BOOCH_JOB=go
+  export BOOCH_GO_TOOLS="golang.org/x/tools/gopls"
+  booch_go_tool_install() { :; }
+  local _calls=0
+  booch_go_tool_version() { _calls=$((_calls+1)); [ "$_calls" -le 1 ] && printf 'v0.1.0' || printf 'v0.2.0'; }
+  booch_go_tools_ensure
+  assert_eq "gopls|updated|v0.1.0|v0.2.0" "$(cat "$BOOCH_RESULT_DIR/go.result")"
+  unset BOOCH_GO_TOOLS
+}
+
+# install 失敗は continue（結果行を残さない）。
+test_go_tools_install_failure_skips_row() {
+  booch_runner_init
+  export BOOCH_JOB=go
+  export BOOCH_GO_TOOLS="example.com/broken/tool"
+  booch_go_tool_install() { return 1; }
+  booch_go_tool_version() { printf ''; }
+  booch_go_tools_ensure 2>/dev/null
+  assert_file_absent "$BOOCH_RESULT_DIR/go.result"
+  unset BOOCH_GO_TOOLS
+}
+
+# 複数モジュールはそれぞれ行を追記する。
+test_go_tools_multiple_modules() {
+  booch_runner_init
+  export BOOCH_JOB=go
+  export BOOCH_GO_TOOLS="github.com/justjanne/powerline-go golang.org/x/tools/gopls"
+  booch_go_tool_install() { :; }
+  booch_go_tool_version() { printf 'v9.9.9'; }   # 既存と同版 → current
+  booch_go_tools_ensure
+  local out; out=$(cat "$BOOCH_RESULT_DIR/go.result")
+  assert_contains "$out" "powerline-go|current"
+  assert_contains "$out" "gopls|current"
+  unset BOOCH_GO_TOOLS
+}
+
 # --- arch 検出（uname を関数で差し替え。実機アーキに依存しない） ---
 test_go_arch_amd64() {
   uname() { echo x86_64; }

@@ -10,13 +10,22 @@
 #   source "$BOOCH_ROOT/jobs/go.sh"
 #   booch_job go "Go" job_go 300      # tarball 取得を含むため timeout は長めに
 #
+# ツールチェイン導入後に `go install` で入れたい Go ツールがある場合は、空白区切りの
+# モジュール一覧を BOOCH_GO_TOOLS に **export** して渡す（ジョブは別プロセスで動くため）。
+# job_go が toolchain 導入後・同一ジョブ内で順に install し、モジュールの basename で
+# 結果を記録する。例:
+#   export BOOCH_GO_TOOLS="github.com/justjanne/powerline-go golang.org/x/tools/gopls"
+#
 # 依存: lib/arch.sh, curl, tar, sudo（/usr/local/go へ展開する）, uname。
+# BOOCH_GO_TOOLS を使う場合は go（PATH 上）と $HOME/go/bin への書込権も要る。
 #
 # テスト用の継ぎ目（seam）。次の関数を上書きすると、ネットワーク / sudo 無しで
 # job_go の分岐（installed / updated / current / 失敗）を検証できる:
 #   booch_go_latest_version       最新版文字列を返す（例: go1.22.0）
 #   booch_go_installed_version    現在の版を返す（未導入なら空）
 #   booch_go_install <version>    実際の導入（副作用）
+#   booch_go_tool_install <mod>   go install（副作用）
+#   booch_go_tool_version <bin>   go ツールの版を返す（未導入なら空）
 
 # 最新の安定版（go.dev が "go1.X.Y" 形式で返す）。
 booch_go_latest_version() {
@@ -61,6 +70,42 @@ booch_go_install() { # <version>
   sudo rm -rf "$old"
 }
 
+# go install で導入するモジュールの版（go version -m のモジュール版）。未導入なら空。
+booch_go_tool_version() { # bin
+  command -v "$1" >/dev/null 2>&1 || return 0
+  go version -m "$(command -v "$1")" 2>/dev/null | awk '/^[[:space:]]+mod/{print $3; exit}'
+}
+
+# モジュールを go install で最新へ導入/更新する（seam）。
+booch_go_tool_install() { # module
+  go install "${1}@latest"
+}
+
+# BOOCH_GO_TOOLS（空白区切りのモジュール一覧）を導入/更新し、basename で結果を記録する。
+# toolchain 導入後・同一ジョブ内で呼ぶ（go が PATH に居る前提）。未設定なら何もしない。
+booch_go_tools_ensure() {
+  local module name old new
+  # 意図的に空白で分割してモジュールを列挙する。
+  # shellcheck disable=SC2086
+  for module in ${BOOCH_GO_TOOLS:-}; do
+    name=${module##*/}
+    old=$(booch_go_tool_version "$name")
+    booch_status "go install ${name}..."
+    if ! booch_go_tool_install "$module"; then
+      echo "go: ${name} の導入に失敗しました（続行）" >&2
+      continue
+    fi
+    new=$(booch_go_tool_version "$name")
+    if [ -z "$old" ]; then
+      booch_result "$name" installed "" "$new"
+    elif [ "$old" != "$new" ]; then
+      booch_result "$name" updated "$old" "$new"
+    else
+      booch_result "$name" current "$new"
+    fi
+  done
+}
+
 job_go() {
   local current latest
   current=$(booch_go_installed_version)
@@ -81,4 +126,7 @@ job_go() {
   else
     booch_result "Go" current "$current"
   fi
+
+  # caller 指定の go ツール（powerline-go / gopls 等）を toolchain 導入後に入れる。
+  booch_go_tools_ensure
 }
