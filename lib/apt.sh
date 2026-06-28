@@ -102,3 +102,47 @@ booch_apt_add_repo() { # name key-url keyring mode deb-line
   booch_apt_install_key "$key_url" "$keyring" "$mode" || return 1
   booch_apt_write_list "$name" "$deb_line"
 }
+
+# パッケージが dpkg で導入済みか（seam）。command -v ではなくパッケージ単位で見るので、
+# コマンド名 != パッケージ名（gnupg→gpg 等）でも判定がぶれない。
+booch_apt_pkg_installed() { # pkg
+  dpkg -s "$1" >/dev/null 2>&1
+}
+
+# 不足分をまとめて導入する（seam。update してから install する）。
+booch_apt_install() { # pkg...
+  sudo apt-get update && sudo apt-get install -y "$@"
+}
+
+# 指定パッケージのうち未導入のものだけを導入する。全て導入済みなら apt を呼ばない
+# （再実行時の無駄な update を避ける）。ブートストラップ前提（curl / gnupg /
+# software-properties-common / ca-certificates 等）の確保に使う。
+booch_apt_ensure() { # pkg...
+  local missing=() p
+  for p in "$@"; do
+    booch_apt_pkg_installed "$p" || missing+=("$p")
+  done
+  [ "${#missing[@]}" -eq 0 ] && return 0
+  booch_apt_install "${missing[@]}"
+}
+
+# autoremove 可能なパッケージ数（seam）。dry-run なので root 不要。
+booch_apt_autoremove_count() {
+  apt-get -s autoremove 2>/dev/null | awk '/^Remv/{c++} END{print c+0}'
+}
+
+# 不要パッケージがあれば件数と手動コマンドを stderr に通知する（自動削除はしない）。
+# 候補があれば 1 を返すので、呼び出し側で警告フラグを立てられる。
+# 注意: 候補ありで 1 を返すため、set -e の caller が bare で呼ぶと中断する。
+# 通知後も処理を続けたいなら `booch_apt_warn_autoremove || warn=1` のように受ける。
+booch_apt_warn_autoremove() {
+  local count
+  count=$(booch_apt_autoremove_count)
+  # 数値以外 / 空（awk 不在等の退化ケース）は 0 とみなす（-eq の構文エラー回避）。
+  case "$count" in '' | *[!0-9]*) count=0 ;; esac
+  [ "$count" -eq 0 ] && return 0
+  printf 'apt: autoremove 可能なパッケージが %d 件あります\n' "$count" >&2
+  printf '  確認: apt-get -s autoremove\n' >&2
+  printf '  実行: sudo apt autoremove\n' >&2
+  return 1
+}

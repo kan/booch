@@ -171,4 +171,79 @@ test_apt_add_repo_aborts_when_key_fails() {
   assert_eq "0" "$list_called" "鍵失敗時は write_list を呼ばない"
 }
 
+# --- booch_apt_ensure（不足分のみ導入） ---
+test_apt_ensure_skips_when_all_installed() {
+  booch_apt_pkg_installed() { return 0; }
+  local called=0
+  booch_apt_install() { called=1; }
+  local rc
+  if booch_apt_ensure curl gnupg; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_eq "0" "$called" "全導入済みなら install を呼ばない"
+}
+
+test_apt_ensure_installs_only_missing() {
+  # gnupg だけ未導入、他は導入済み。
+  booch_apt_pkg_installed() { [ "$1" = gnupg ] && return 1; return 0; }
+  local args="__unset__"
+  booch_apt_install() { args="$*"; }
+  booch_apt_ensure curl gnupg ca-certificates
+  assert_eq "gnupg" "$args"
+}
+
+# 複数未導入のとき、未導入のものだけを元の順序で渡す（並べ替え・取りこぼし・
+# 重複が無いことまで見る）。
+test_apt_ensure_passes_all_missing_in_order() {
+  booch_apt_pkg_installed() { [ "$1" = gnupg ] && return 0; return 1; }
+  local args="__unset__"
+  booch_apt_install() { args="$*"; }
+  booch_apt_ensure curl gnupg ca-certificates
+  assert_eq "curl ca-certificates" "$args"
+}
+
+test_apt_ensure_zero_args_is_noop() {
+  booch_apt_pkg_installed() { return 1; }
+  local called=0
+  booch_apt_install() { called=1; }
+  local rc
+  if booch_apt_ensure; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_eq "0" "$called" "引数なしなら install を呼ばない"
+}
+
+test_apt_ensure_propagates_install_failure() {
+  booch_apt_pkg_installed() { return 1; }   # 全て未導入
+  booch_apt_install() { return 1; }
+  local rc
+  if booch_apt_ensure curl; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+
+# --- booch_apt_warn_autoremove ---
+test_apt_warn_autoremove_silent_when_zero() {
+  booch_apt_autoremove_count() { echo 0; }
+  local rc
+  if booch_apt_warn_autoremove 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+test_apt_warn_autoremove_warns_when_present() {
+  booch_apt_autoremove_count() { echo 3; }
+  local tmpout tmperr rc
+  tmpout=$(mktemp); tmperr=$(mktemp)
+  if booch_apt_warn_autoremove >"$tmpout" 2>"$tmperr"; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_contains "$(cat "$tmperr")" "3"
+  assert_eq "" "$(cat "$tmpout")" "通知は stdout を汚さない"
+  rm -f "$tmpout" "$tmperr"
+}
+
+# 退化ケース（awk 不在等で count が空/非数値）でも構文エラーにならず 0 扱い。
+test_apt_warn_autoremove_treats_nonnumeric_as_zero() {
+  booch_apt_autoremove_count() { echo ""; }
+  local rc
+  if booch_apt_warn_autoremove 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
 run_tests
