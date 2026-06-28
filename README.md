@@ -25,7 +25,8 @@ booch/
 │   ├── claude.sh                 # Claude Code 本体 / marketplace / plugin の冪等な導入・更新
 │   ├── npm.sh                    # ローカル npm プロジェクト同期 / グローバル install
 │   ├── confirm.sh                # 更新確認のフレーム（登録前の y/N 判断・tty プロンプト）
-│   └── sudo.sh                   # 並列ジョブ向け sudo 事前キャッシュ + キープアライブ
+│   ├── sudo.sh                   # 並列ジョブ向け sudo 事前キャッシュ + キープアライブ
+│   └── fs.sh                     # symlink 配置 / TOML キーの冪等更新
 ├── jobs/
 │   ├── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新
 │   ├── delta.sh                  # 提供ジョブ: delta (git pager) の導入 / 更新
