@@ -116,6 +116,19 @@ bash tests/run.sh
 GitHub Actions（`.github/workflows/ci.yml`）が push と pull request ごとに、構文
 チェック・shellcheck・ユニットテスト・デモのスモークを実行する。
 
+## セキュリティ（取得物の信頼モデル）
+
+提供ジョブは各ツールを HTTPS 経由で公式配布元（go.dev / GitHub Releases /
+awscli.amazonaws.com / astral.sh / claude.ai 等）から取得して導入する。転送の完全性と
+配布元の真正性は HTTPS に依存し、rustup / nvm / uv 等の公式インストーラと同水準の信頼
+モデルである。
+
+「最新版を入れる」ジョブはバージョンが事前に未知のため、固定 SHA256 ピン（vendor の
+bash-concurrent で採用）は適用できない。**現時点では取得バイナリ / インストーラの個別の
+チェックサム・署名検証は行っていない**（既知の制約）。upstream が公開するチェックサム
+（go の `.sha256`、一部 GitHub Releases の `checksums.txt` 等）での段階的な検証追加は
+今後の課題（[#1](https://github.com/kan/booch/issues/1)）。
+
 ## vendor の更新
 
 bash-concurrent は vendor 方式でリポジトリにコミットしている。版を上げるときは

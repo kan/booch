@@ -79,6 +79,19 @@ test_duplicate_job_name_rejected() {
   assert_status 1 "$rc"
 }
 
+# ジョブ名のディレクトリ脱出・空名を拒否する（結果ファイルが結果ディレクトリ外へ
+# 書き出されるのを防ぐ。Codex 監査指摘）。
+test_job_name_rejects_path_escape() {
+  booch_runner_init
+  local rc
+  if booch_job "../evil" "X" _j_current 60 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  if booch_job "a/b" "X" _j_current 60 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  if booch_job "" "X" _j_current 60 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+
 # 非 tty 出力に色エスケープを混ぜない（パイプ/CI/ログ捕捉対策）。
 test_no_color_when_not_tty() {
   booch_runner_init

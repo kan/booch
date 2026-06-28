@@ -66,7 +66,10 @@ booch_runner_init() {
   # shellcheck source=/dev/null
   source "$lib"
 
-  BOOCH_RESULT_DIR=$(mktemp -d)
+  BOOCH_RESULT_DIR=$(mktemp -d) || {
+    echo "booch: 結果ディレクトリの作成に失敗しました（mktemp -d）" >&2
+    return 1
+  }
   export BOOCH_RESULT_DIR
 
   _booch_names=()
@@ -80,6 +83,11 @@ booch_runner_init() {
 # （重複すると結果ファイルが混ざり二重表示になる）。
 booch_job() {
   local name=$1 label=$2 fn=$3 timeout=${4:-$BOOCH_JOB_TIMEOUT_DEFAULT}
+  # name は結果ファイル名 "$BOOCH_RESULT_DIR/<name>.result" になるため、ディレクトリ
+  # 脱出（/ や ..、先頭 .）と空名を拒否する（lib/apt.sh の repo 名チェックと同方針）。
+  case "$name" in
+    "" | */* | .*) echo "booch_job: 不正なジョブ名: $name" >&2; return 1 ;;
+  esac
   local n
   if [ "${#_booch_names[@]}" -gt 0 ]; then
     for n in "${_booch_names[@]}"; do
@@ -155,7 +163,12 @@ booch_run() {
   done
 
   # bash-concurrent の既定ログ出力先（$PWD/.logs）でカレントを汚さないよう退避。
-  local log_dir; log_dir=$(mktemp -d)
+  local log_dir
+  log_dir=$(mktemp -d) || {
+    echo "booch: ログディレクトリの作成に失敗しました（mktemp -d）" >&2
+    _booch_cleanup
+    return 1
+  }
   export CONCURRENT_LOG_DIR="$log_dir"
 
   # bash-concurrent は nounset 非対応（未定義変数を前提に書かれている）。
