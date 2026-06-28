@@ -14,7 +14,8 @@ dotfiles に残し、booch は汎用部分だけを担う。
 ```
 booch/
 ├── lib/
-│   └── runner.sh                 # 並列ジョブランナー（bash-concurrent 上に構築）
+│   ├── runner.sh                 # 並列ジョブランナー（bash-concurrent 上に構築）
+│   └── os.sh                     # OS 検出（os-release → BOOCH_OS_*）
 ├── jobs/
 │   └── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新
 ├── vendor/
