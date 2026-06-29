@@ -36,8 +36,11 @@ source "$BOOCH_ROOT/jobs/circleci.sh"
 # ネットワーク / sudo / 展開を潰すスタブ群を、呼び出した（サブ）シェルに定義する。
 # 個々の install 関数が間接的に呼ぶだけなので shellcheck からは到達不能に見える（SC2317）。
 # tar / dpkg は対象コード内で `sudo tar` 等として呼ばれる箇所もあるが、sudo 自体もスタブで
-# 潰しているため shell 関数として効かなくても問題ない（SC2032/SC2033 を抑止）。
-# shellcheck disable=SC2317,SC2032,SC2033
+# 潰しているため shell 関数として効かなくても問題ない（SC2032/SC2033 を抑止）。各スタブは
+# source 済みの install 関数からコマンド名・seam 名として間接的に呼ばれるだけなので、
+# 静的解析からは「未呼び出し」に見える（SC2329 を抑止。CI の 0.9.0 は出さないが差分
+# 解析は新版で出すため）。
+# shellcheck disable=SC2317,SC2032,SC2033,SC2329
 _rt_stubs() {
   # -o で指定された先に空ファイルを置くだけ（実通信しない）。
   curl() { local o=""; while [ "$#" -gt 0 ]; do [ "$1" = -o ] && { o=$2; shift; }; shift; done; [ -n "$o" ] && : > "$o" 2>/dev/null; return 0; }
