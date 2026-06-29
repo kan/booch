@@ -93,27 +93,29 @@ lib にも等しく効く。加えて:
 ## 動作確認
 
 CI（`ci.yml`）と同じ一式をローカルでも回す。対象は全ファイル（`lib/*.sh` `jobs/*.sh`
-`vendor/update.sh` `examples/demo.sh` `tests/*.sh`）で、CI のグロブと一致させる。
+`vendor/update.sh` `examples/*.sh` `tests/*.sh`）で、CI のグロブと一致させる。
 
 ```bash
-bash -n lib/*.sh jobs/*.sh vendor/update.sh examples/demo.sh tests/*.sh      # 構文チェック
-shellcheck -x lib/*.sh jobs/*.sh vendor/update.sh examples/demo.sh tests/*.sh
+bash -n lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh      # 構文チェック
+shellcheck -x lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
 bash tests/run.sh                                          # ユニットテスト
-bash examples/demo.sh                                      # スモーク（失敗/timeout 込み）
+bash tests/smoke.sh                                        # ランナースモーク（失敗/timeout 込み）
 ```
 
 ## テスト
 
 `tests/` に外部依存のないユニットテストを置く。`bash tests/run.sh` でローカル実行、
 GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに同じ一式
-（構文チェック / shellcheck / ユニットテスト / demo スモーク）を回す。
+（構文チェック / shellcheck / ユニットテスト / ランナースモーク）を回す。
 
 - `tests/lib.sh`: 最小テストフレームワーク。`test_*` 関数をサブシェル + `set -e` で
   隔離実行し集計する。
 - `tests/*_test.sh`: 各対象のテスト。runner はフェイク job で駆動し、`update.sh` は
-  curl を shim で差し替えてネットワーク非依存にする。
+  curl を shim で差し替えてネットワーク非依存にする。`tests/run.sh` は `*_test.sh` だけを
+  集めて実行するため、スモーク（`smoke.sh`）はユニット実行に混ざらない。
 - テストはなるべく **code-review で見つけた不具合の回帰ガード**として書く。
-- `examples/demo.sh` はスモークであり、ユニットテストの代替ではない。
+- `tests/smoke.sh` はランナーのエンドツーエンド・スモークであり、ユニットテストの代替では
+  ない。利用者向けの使い方サンプルは `examples/`（実際にツールを導入する現実例を含む）。
 
 ## ドキュメントの保守
 

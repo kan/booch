@@ -47,9 +47,12 @@ booch/
 ├── vendor/
 │   ├── bash-concurrent/          # 並列実行ライブラリ（MIT, vendoring してコミット）
 │   └── update.sh                 # vendor 更新スクリプト（メンテ用）
-├── tests/                        # ユニットテスト（依存なし）
-└── examples/
-    └── demo.sh                   # runner.sh のスモークテスト兼デモ
+├── tests/                        # ユニットテスト（依存なし）+ runner スモーク（smoke.sh）
+└── examples/                     # 利用側向けの使い方サンプル
+    ├── README.md                 # サンプルの読む順番
+    ├── custom-job.sh             # 最小: booch を source して custom job を登録
+    ├── bootstrap.sh              # 現実例: 提供ジョブを sudo 事前キャッシュ付きで一括導入
+    └── lib-helpers.sh            # fs / confirm / sudo ヘルパーの小サンプル
 ```
 
 ## 前提
@@ -122,25 +125,33 @@ source "$BOOCH_ROOT/jobs/go.sh"
 booch_job go "Go" job_go 300            # 未導入なら導入、最新と異なれば更新
 ```
 
-### デモ
+### サンプル
 
-```bash
-bash examples/demo.sh
-```
+利用側 dotfiles からどう組むかは `examples/` のサンプルを参照する（読む順番は
+[examples/README.md](examples/README.md)）。
 
-正常終了、実行中ステータスの更新、サマリー各種、失敗ジョブのログ表示、タイムアウトを
-ひととおり確認できる。
+| サンプル | 狙い |
+|---|---|
+| `examples/custom-job.sh` | booch を source して自分用の custom job を登録する最小例 |
+| `examples/bootstrap.sh` | 提供ジョブ（go / delta / codex / aws / circleci）を sudo 事前キャッシュ付きで一括導入する現実例 |
+| `examples/lib-helpers.sh` | `fs.sh` の symlink / TOML 更新、`confirm.sh` の更新確認、`sudo.sh` の事前キャッシュの使い方 |
+
+サンプルは実際にツールを導入する（network + sudo）ものを含むため、コピーして自分の環境に
+合わせる出発点として使う。
 
 ## テスト
 
 外部依存のないユニットテストを `tests/` に置く。
 
 ```bash
-bash tests/run.sh
+bash tests/run.sh        # ユニットテスト
+bash tests/smoke.sh      # ランナーのスモーク（失敗ジョブ・timeout を含むため rc=1 が正常）
 ```
 
-GitHub Actions（`.github/workflows/ci.yml`）が push と pull request ごとに、構文
-チェック・shellcheck・ユニットテスト・デモのスモークを実行する。
+`tests/smoke.sh` はランナーが正常終了・ステータス更新・サマリー各種・失敗ログ表示・
+タイムアウトをひととおり正しく扱うかを確認するエンドツーエンドのスモークで、ユニット
+テストの代替ではない。GitHub Actions（`.github/workflows/ci.yml`）が push と pull request
+ごとに、構文チェック・shellcheck・ユニットテスト・スモークを実行する。
 
 ## セキュリティ（取得物の信頼モデル）
 

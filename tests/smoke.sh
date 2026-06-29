@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# runner.sh のスモークテスト兼デモ。
+# runner.sh のエンドツーエンド・スモークテスト。CI（ci.yml）の smoke ステップが実行し、
+# ランナーが次をひととおり正しく扱うかを 1 回の booch_run で確認する:
 #   - 正常終了 + 実行中ステータス更新（fd 3）
 #   - サマリー各種（installed / updated / current / migrated）
 #   - 失敗ジョブ（末尾にログ表示・全体は非 0 終了）
 #   - タイムアウト（3 秒で kill）
-# 実行: bash examples/demo.sh
+# 失敗ジョブと timeout を含むため、全体は非 0（rc=1）で終了するのが正しい挙動。
+# ユニットテスト（tests/run.sh）の代替ではない。利用者向けの使い方サンプルは examples/ を参照。
+# 実行: bash tests/smoke.sh
 
 # 各 job_* は booch_job 登録 → runner が bash -c 経由で間接実行する。shellcheck は
 # 直接の呼び出しが見えず「到達不能」と誤検知するため、ファイル単位で無効化する。
