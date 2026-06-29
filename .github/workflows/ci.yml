@@ -5,6 +5,10 @@ on:
     branches: ["**"]
   pull_request:
 
+# GITHUB_TOKEN を最小権限に絞る（CI はチェックアウトと検査のみで書き込み不要）。
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

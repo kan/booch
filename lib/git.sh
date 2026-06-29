@@ -97,6 +97,13 @@ booch_git_self_update() {
     [ -n "$fetch_err" ] && echo "  git fetch: $fetch_err" >&2
     exit 1
   fi
+  # upstream 追跡ブランチが無ければ ahead/behind を比較できない。rev-list の失敗を 0 0 と
+  # 同一視して「Up to date」と誤報しないよう、上流未設定を明示検出して中断する
+  # （fetch 成功と上流未設定は区別する。前者だけが「比較できた」状態）。
+  if ! git -C "$dir" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
+    echo "No upstream tracking branch configured; skipping update check."
+    return 0
+  fi
   local counts ahead behind
   counts=$(git -C "$dir" rev-list --left-right --count "HEAD...@{u}" 2>/dev/null || echo "0 0")
   read -r ahead behind <<<"$counts"
@@ -105,9 +112,15 @@ booch_git_self_update() {
   elif [ "$behind" -gt 0 ]; then
     echo "${behind} update(s) available."
     if booch_git_self_update_confirm; then
-      git -C "$dir" pull
-      echo "Re-running the latest version..."
-      booch_git_reexec "$@"
+      # pull 成功時のみ再実行する。失敗（conflict / dirty / hook 等）なら古いコードで
+      # 「最新版で再実行」と誤報させない。自己更新は ff-only に限定する。
+      if git -C "$dir" pull --ff-only; then
+        echo "Re-running the latest version..."
+        booch_git_reexec "$@"
+      else
+        printf '%sWarning:%s pull failed; staying on the current version.\n' \
+          "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" >&2
+      fi
     fi
   elif [ "$ahead" -gt 0 ]; then
     echo "Local is ahead by ${ahead}."

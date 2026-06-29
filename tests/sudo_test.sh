@@ -38,4 +38,17 @@ test_sudo_stop_clears_pid() {
   assert_eq "" "$BOOCH_SUDO_KEEPALIVE_PID" "停止で PID をクリアする"
 }
 
+# 再 prime は前回のキープアライブを止めてから始める（孤児の refresher を残さない）。
+# 2 回目の prime が内部で stop を呼ぶことを数えて回帰ガードする。
+# shellcheck disable=SC2317  # stub は間接呼び出し
+test_sudo_prime_stops_previous_keepalive() {
+  booch_sudo_validate() { return 0; }
+  booch_sudo_refresh() { return 1; }   # bg ループは即抜ける（残留プロセス回避）
+  booch_sudo_prime
+  local stop_calls=0
+  booch_sudo_stop() { stop_calls=$((stop_calls + 1)); BOOCH_SUDO_KEEPALIVE_PID=""; }
+  booch_sudo_prime
+  assert_eq "1" "$stop_calls" "再 prime は内部で stop を呼ぶ"
+}
+
 run_tests

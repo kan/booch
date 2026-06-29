@@ -65,6 +65,11 @@ test_verify_pick_strips_bsd_star() {
   assert_eq "cccc" "$(printf '%s\n' 'cccc *go1.99.0.linux-amd64.tar.gz' | booch_verify_pick go1.99.0.linux-amd64.tar.gz)"
 }
 
+# CRLF 改行の checksums.txt でも末尾 CR を外して照合する。
+test_verify_pick_strips_crlf() {
+  assert_eq "dddd" "$(printf 'dddd  go1.99.0.linux-amd64.tar.gz\r\n' | booch_verify_pick go1.99.0.linux-amd64.tar.gz)"
+}
+
 # 該当行が無ければ非 0（空出力）。
 test_verify_pick_missing_fails() {
   local out rc

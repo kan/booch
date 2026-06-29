@@ -141,6 +141,35 @@ test_self_update_behind_accepted_reexecs() {
   rm -rf "$d"
 }
 
+# 更新ありで確認 yes でも pull が失敗したら再実行しない（古いコードで「最新」と誤報しない）。
+test_self_update_behind_pull_failure_no_reexec() {
+  _stub_git; _G_FETCH_RC=0; _G_COUNTS="0 1"; _G_PULL_RC=1
+  booch_git_self_update_confirm() { return 0; }
+  local reexec=0; booch_git_reexec() { reexec=1; }
+  local d; d=$(_mk_repo)
+  local out; out=$(booch_git_self_update "$d" true 2>&1)
+  assert_eq "0" "$reexec" "pull 失敗時は再実行しない"
+  assert_contains "$out" "pull failed"
+  rm -rf "$d"
+}
+
+# 上流追跡ブランチが無ければ「Up to date」と誤報せず skip する。
+# shellcheck disable=SC2317  # git スタブは間接呼び出し
+test_self_update_no_upstream_skips() {
+  _stub_git; _G_FETCH_RC=0
+  git() {   # @{u} 解決だけ失敗させる（上流未設定を再現）
+    local sub; if [ "$1" = "-C" ]; then sub=$3; else sub=$1; fi
+    case "$sub" in
+      fetch) return 0 ;;
+      rev-parse) case "$*" in *'@{u}'*) return 1 ;; *) printf 'main' ;; esac ;;
+      *) return 0 ;;
+    esac
+  }
+  local d; d=$(_mk_repo)
+  assert_contains "$(booch_git_self_update "$d" true)" "No upstream"
+  rm -rf "$d"
+}
+
 # fetch 失敗は exit 1 で中断する（サブシェルで捕捉）。
 test_self_update_fetch_failure_aborts() {
   _stub_git; _G_FETCH_RC=1

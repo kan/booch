@@ -96,9 +96,11 @@ booch_apt_add_repo() { # name key-url keyring mode deb-line
   case "$name" in
     "" | */* | .*) echo "apt: 不正な repo 名: $name" >&2; return 2 ;;
   esac
-  # 完了マーカは <name>.list のみ。これがあれば導入済みとみなしスキップする
-  # （鍵だけ消えた半端な状態は補修しないが、運用上は十分）。
-  [ -f "$BOOCH_APT_SOURCES_DIR/$name.list" ] && return 0
+  # 完了マーカは <name>.list だが、鍵だけ消えた半端な状態を自己修復するため keyring の
+  # 可読性も確認する。両方そろっていれば導入済みとみなしスキップ、欠けていれば入れ直す。
+  if [ -f "$BOOCH_APT_SOURCES_DIR/$name.list" ] && [ -r "$keyring" ]; then
+    return 0
+  fi
   booch_apt_install_key "$key_url" "$keyring" "$mode" || return 1
   booch_apt_write_list "$name" "$deb_line"
 }

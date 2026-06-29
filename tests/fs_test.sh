@@ -54,6 +54,18 @@ test_symlink_backs_up_real_file() {
   rm -rf "$d"
 }
 
+# 既に .bak があるときは上書きせず、最初のバックアップを保持する（別名へ退避）。
+test_symlink_preserves_existing_bak() {
+  local d; d=$(mktemp -d)
+  : > "$d/src"
+  printf 'first-backup' > "$d/dest.bak"   # 既存の重要なバックアップ
+  printf 'real-content' > "$d/dest"
+  booch_symlink "$d/src" "$d/dest" >/dev/null 2>&1
+  assert_eq "first-backup" "$(cat "$d/dest.bak")" "既存 .bak を壊さない"
+  assert_eq "$d/src" "$(readlink "$d/dest")"
+  rm -rf "$d"
+}
+
 # --- booch_set_toml_key ---
 test_toml_adds_when_absent() {
   local f; f=$(mktemp)
@@ -88,6 +100,34 @@ test_toml_matches_spaced_key() {
   printf 'model="old"\n' > "$f"
   booch_set_toml_key "$f" model '"new"'
   assert_eq 'model = "new"' "$(cat "$f")"
+  rm -f "$f"
+}
+
+# 親ディレクトリが無くても作って配置する（~/.codex/config.toml 初回相当）。
+test_toml_creates_parent_dir() {
+  local d; d=$(mktemp -d)
+  booch_set_toml_key "$d/nested/config.toml" model '"x"'
+  assert_eq 'model = "x"' "$(cat "$d/nested/config.toml")"
+  rm -rf "$d"
+}
+
+# 置換メタ文字（& | \ /）を含む値もリテラルに書き込む（sed 誤置換の回帰ガード）。
+test_toml_value_with_metacharacters_is_literal() {
+  local f; f=$(mktemp)
+  booch_set_toml_key "$f" url '"a&b|c\d/e"'
+  booch_set_toml_key "$f" url '"x&y|z"'   # 既存キーを再置換しても壊れない
+  assert_eq 'url = "x&y|z"' "$(cat "$f")"
+  rm -f "$f"
+}
+
+# regex メタ文字を含むキーはリテラル一致（'a.b' が 'aXb' 行を誤置換しない）。
+test_toml_dotted_key_is_literal_match() {
+  local f; f=$(mktemp)
+  printf 'aXb = 1\n' > "$f"
+  booch_set_toml_key "$f" 'a.b' '2'
+  local content; content=$(cat "$f")
+  assert_contains "$content" 'aXb = 1'      # 別行は触らない
+  assert_contains "$content" 'a.b = 2'      # 新規追記
   rm -f "$f"
 }
 

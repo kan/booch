@@ -43,13 +43,26 @@ test_apt_resolve_fallback_warns_on_stderr() {
 test_apt_add_repo_skips_when_list_exists() {
   local d; d=$(mktemp -d)
   export BOOCH_APT_SOURCES_DIR="$d"
-  : > "$d/foo.list"
+  : > "$d/foo.list"; : > "$d/kr"   # list と keyring 両方そろっている
   local called=0
   booch_apt_install_key() { called=1; }
   booch_apt_write_list()  { called=1; }
-  booch_apt_add_repo foo https://k /tmp/kr raw "deb x"
+  booch_apt_add_repo foo https://k "$d/kr" raw "deb x"
   rm -rf "$d"
   assert_eq "0" "$called"
+}
+
+# list はあるが keyring が欠けていれば、鍵を入れ直して自己修復する。
+test_apt_add_repo_reinstalls_when_keyring_missing() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  : > "$d/foo.list"   # list はあるが keyring（$d/kr）は無い
+  local key_called=0
+  booch_apt_install_key() { key_called=1; }
+  booch_apt_write_list()  { :; }
+  booch_apt_add_repo foo https://k "$d/kr" raw "deb x"
+  rm -rf "$d"
+  assert_eq "1" "$key_called" "keyring 欠損なら鍵を入れ直す"
 }
 
 test_apt_add_repo_installs_when_absent() {

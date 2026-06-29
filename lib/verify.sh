@@ -43,11 +43,11 @@ booch_verify_sha256() { # file expected
 }
 
 # checksums.txt 形式（"<hash>  <filename>" の行集合）を stdin で受け、asset の期待
-# ハッシュを stdout へ返す純粋関数。BSD 形式（"<hash> *<filename>"）の先頭 * も外す。
-# 見つからなければ非 0（空出力）。
+# ハッシュを stdout へ返す純粋関数。BSD 形式（"<hash> *<filename>"）の先頭 * と、CRLF
+# 改行の末尾 CR を外して照合する。見つからなければ非 0（空出力）。
 booch_verify_pick() { # asset   (checksums text on stdin)
   awk -v want="$1" '
-    { name=$2; sub(/^\*/, "", name); if (name == want) { print $1; found=1; exit } }
+    { name=$2; sub(/^\*/, "", name); sub(/\r$/, "", name); if (name == want) { print $1; found=1; exit } }
     END { exit !found }
   '
 }
