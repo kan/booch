@@ -21,6 +21,9 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
   非対話・冪等に「未導入なら導入、最新と異なれば更新」する
 - 取得物の SHA256 検証（`lib/verify.sh`）: go は `dl.google.com` の `.sha256`、circleci は
   リリースの `checksums.txt` と照合し、不一致なら展開・sudo 導入前に止める
+- ワンライナー bootstrap（`install.sh`）: 素の WSL2/Ubuntu から git / gh を確保し、dotfiles を
+  clone して submodule（または sibling clone）で booch を取り込み、dotfiles の setup を起動する。
+  `curl -fsSL .../install.sh | bash`（Windows 版の素 OS bootstrap は kan/booch-win が担う）
 - CLI（`bin/booch`）: `init`（利用側 dotfiles 雛形の生成。冪等）/ `version`
 - 利用側サンプル（`examples/`）: custom-job / bootstrap / lib-helpers
 - セキュリティ施策: Dependabot（github-actions）/ Dependabot alerts / Secret scanning +

@@ -102,14 +102,26 @@ lib にも等しく効く。加えて:
   ので、雛形を直したらテストで回帰を防ぐ。
 - `bin/booch` は CI / 動作確認の lint 対象（`.sh` 拡張子が無いのでグロブに明示で含める）。
 
+ルートの `install.sh` は **素の OS から booch を使う dotfiles を入れるワンライナー bootstrap**
+（`curl | bash`。Windows 版は別リポジトリ kan/booch-win の `win.ps1`）。
+
+- **自己完結に保つ**。booch がまだ無い状態で走るため、booch の lib を source できない（gh の
+  apt repo 追加なども install.sh 内にインライン）。冪等（無ければ入れる / 既存なら更新）。
+- **副作用は seam に切り出す**（`booch_install_apt` / `_gh` / `_git` / `_exec`）。テストは
+  `BOOCH_INSTALL_NO_RUN=1` で source し、seam をスタブして network/sudo/実行なしで分岐を検証する
+  （`tests/install_test.sh`）。末尾の `main` 実行はこの env で抑止される。
+- **clean 環境での実地スモークは未実施**（`curl|bash` 下の gh auth の tty 取り回し等）。実機検証は
+  別途。`install.sh` も lint グロブ対象。
+
 ## 動作確認
 
-CI（`ci.yml`）と同じ一式をローカルでも回す。対象は全ファイル（`bin/booch` `lib/*.sh`
-`jobs/*.sh` `vendor/update.sh` `examples/*.sh` `tests/*.sh`）で、CI のグロブと一致させる。
+CI（`ci.yml`）と同じ一式をローカルでも回す。対象は全ファイル（`bin/booch` `install.sh`
+`lib/*.sh` `jobs/*.sh` `vendor/update.sh` `examples/*.sh` `tests/*.sh`）で、CI のグロブと
+一致させる。
 
 ```bash
-bash -n bin/booch lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh      # 構文チェック
-shellcheck -x bin/booch lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
+bash -n bin/booch install.sh lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh      # 構文チェック
+shellcheck -x bin/booch install.sh lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
 bash tests/run.sh                                          # ユニットテスト
 bash tests/smoke.sh                                        # ランナースモーク（失敗/timeout 込み）
 ```
