@@ -1,0 +1,22 @@
+# Dependabot のバージョン更新設定。
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# booch は package manifest（package.json / go.mod 等）を持たない Bash 製のため、依存
+# パッケージ用エコシステム（gomod / npm 等）は対象外。CI / security ワークフローが使う
+# GitHub Actions のみ追従する。vendor/bash-concurrent は Dependabot 対象外で、
+# vendor/update.sh（sha256 ピン）で手動更新する。
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "00:00"
+      timezone: "Asia/Tokyo"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    open-pull-requests-limit: 5
