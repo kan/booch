@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# booch CLI。現状はサブコマンド init（利用側 dotfiles 雛形の生成）のみ。
+# ライブラリ／ランナーとしての使い方は README を参照（CLI は補助で、本体は source して使う）。
+set -uo pipefail
+
+BOOCH_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export BOOCH_ROOT
+
+_booch_usage() {
+  cat <<'USAGE'
+booch - WSL2 / Ubuntu 向け開発環境ブートストラップ基盤
+
+使い方:
+  booch init <dir>    利用側 dotfiles リポジトリの雛形を <dir> に生成する（冪等）
+  booch help          このヘルプを表示する
+
+ランナー／ライブラリとしての使い方は README.md を参照。
+USAGE
+}
+
+cmd=${1:-}
+case "$cmd" in
+  init)
+    shift
+    source "$BOOCH_ROOT/lib/scaffold.sh"
+    booch_scaffold "${1:-}"
+    ;;
+  help | -h | --help)
+    _booch_usage
+    ;;
+  "")
+    _booch_usage >&2
+    exit 1
+    ;;
+  *)
+    echo "booch: 不明なサブコマンド: $cmd" >&2
+    echo "  booch help でヘルプを表示" >&2
+    exit 1
+    ;;
+esac

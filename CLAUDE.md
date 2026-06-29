@@ -90,14 +90,26 @@ lib にも等しく効く。加えて:
   / `booch_verify_fetch` のような副作用関数を分け、分岐ロジックをスタブで純粋にテストできる
   ようにする。
 
+## CLI（bin/booch）と雛形（lib/scaffold.sh）
+
+`bin/booch` は補助 CLI（現状 `init` のみ）で、本体はあくまで source して使うライブラリ。
+`init` は `lib/scaffold.sh` の `booch_scaffold <dir>` に委譲し、利用側 dotfiles の雛形を作る。
+
+- **雛形は quoted heredoc（`<<'MARK'`）で書く**。`$BOOCH_ROOT` 等を生成時に展開させないため。
+  生成物に個人固有・業務固有の値を埋め込まず、プレースホルダ（`<...>` / `(edit me)`）で示す。
+- **生成物は冪等**。既存ファイルは上書きしない（`_booch_scaffold_write` が skip する）。
+- **生成したシェルは構文妥当に保つ**。`tests/scaffold_test.sh` が生成物を `bash -n` で検証する
+  ので、雛形を直したらテストで回帰を防ぐ。
+- `bin/booch` は CI / 動作確認の lint 対象（`.sh` 拡張子が無いのでグロブに明示で含める）。
+
 ## 動作確認
 
-CI（`ci.yml`）と同じ一式をローカルでも回す。対象は全ファイル（`lib/*.sh` `jobs/*.sh`
-`vendor/update.sh` `examples/*.sh` `tests/*.sh`）で、CI のグロブと一致させる。
+CI（`ci.yml`）と同じ一式をローカルでも回す。対象は全ファイル（`bin/booch` `lib/*.sh`
+`jobs/*.sh` `vendor/update.sh` `examples/*.sh` `tests/*.sh`）で、CI のグロブと一致させる。
 
 ```bash
-bash -n lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh      # 構文チェック
-shellcheck -x lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
+bash -n bin/booch lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh      # 構文チェック
+shellcheck -x bin/booch lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
 bash tests/run.sh                                          # ユニットテスト
 bash tests/smoke.sh                                        # ランナースモーク（失敗/timeout 込み）
 ```
