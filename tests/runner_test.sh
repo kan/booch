@@ -79,6 +79,14 @@ test_duplicate_job_name_rejected() {
   assert_status 1 "$rc"
 }
 
+# 未定義のジョブ関数は登録時に弾く（typo を実行時の不可解なエラーにしない）。
+test_undefined_job_fn_rejected() {
+  booch_runner_init
+  local rc
+  if booch_job y "Y" _j_does_not_exist 60 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+
 # ジョブ名のディレクトリ脱出・空名を拒否する（結果ファイルが結果ディレクトリ外へ
 # 書き出されるのを防ぐ。Codex 監査指摘）。
 test_job_name_rejects_path_escape() {

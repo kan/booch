@@ -68,9 +68,22 @@ test_aws_ssm_installed_when_missing_before() {
   _run_job_aws "2.20.0" "2.20.0" "" "1.2.3"
   assert_contains "$(cat "$BOOCH_RESULT_DIR/aws.result")" "SSM Plugin|installed||1.2.3"
 }
-test_aws_ssm_updated_when_version_changes() {
-  _run_job_aws "2.20.0" "2.20.0" "1.2.0" "1.2.3"
-  assert_contains "$(cat "$BOOCH_RESULT_DIR/aws.result")" "SSM Plugin|updated|1.2.0|1.2.3"
+# SSM は upstream に版確認手段が無いため「未導入時のみ導入」。導入済みなら再導入せず
+# current を出す（毎回再取得しない＝冪等性の回帰ガード）。
+# shellcheck disable=SC2317  # install スタブは job 経由でのみ呼ばれる
+test_aws_ssm_current_and_no_reinstall_when_present() {
+  booch_runner_init
+  booch_aws_arch() { echo x86_64; }
+  booch_aws_cli_installed_version() { printf '2.20.0'; }
+  booch_aws_cli_latest() { printf '2.20.0'; }
+  booch_aws_cli_install() { :; }
+  booch_aws_ssm_installed_version() { printf '1.2.3'; }
+  local ssm_installed=0
+  booch_aws_ssm_install() { ssm_installed=1; }
+  export BOOCH_JOB=aws
+  job_aws
+  assert_contains "$(cat "$BOOCH_RESULT_DIR/aws.result")" "SSM Plugin|current|1.2.3"
+  assert_eq "0" "$ssm_installed" "導入済みなら再導入しない（冪等）"
 }
 test_aws_ssm_current_when_same() {
   _run_job_aws "2.20.0" "2.20.0" "1.2.3" "1.2.3"

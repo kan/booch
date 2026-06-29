@@ -86,6 +86,12 @@ booch_job() {
   case "$name" in
     "" | */* | .*) echo "booch_job: 不正なジョブ名: $name" >&2; return 1 ;;
   esac
+  # fn は実在する関数でなければならない（typo を早期に弾く。fn は declare -f で子へ運ばれ、
+  # 未定義だと実行時に不可解なエラーになる）。declare -F は名前照合のみで副作用は無い。
+  if ! declare -F "$fn" >/dev/null 2>&1; then
+    echo "booch_job: 未定義のジョブ関数: $fn" >&2
+    return 1
+  fi
   local n
   if [ "${#_booch_names[@]}" -gt 0 ]; then
     for n in "${_booch_names[@]}"; do
@@ -113,6 +119,30 @@ booch_result() {
   local tool=$1 status=$2 old_ver=${3:-} new_ver=${4:-}
   printf '%s|%s|%s|%s\n' "$tool" "$status" "$old_ver" "$new_ver" \
     >> "$BOOCH_RESULT_DIR/${BOOCH_JOB:-_}.result"
+}
+
+# 版を比較して installed / updated / current を記録する、ジョブ向けの共通分岐。jobs/ の
+# 各ジョブで重複していた「未導入→install / 版違い→update / 同一→current」を 1 箇所に集約する。
+# ジョブ関数内から呼ぶ（booch_status / booch_result と同じく declare -f で子へ運ばれる）。
+#   label    : サマリーのツール名（booch_result の第 1 引数）
+#   noun     : status 表示の語（"delta" 等。空なら版だけ表示）
+#   current  : 現在の版（空＝未導入）。比較・表示に使う（呼び出し側で正規化済みの値）
+#   latest   : 最新の版。比較・表示に使う
+#   以降     : 実際に導入するコマンドと引数（副作用 seam。失敗時は set -e でジョブが abort し、
+#              runner が failed を補う。各ジョブの直書きと同じ挙動）
+booch_job_sync() { # label noun current latest install_cmd...
+  local label=$1 noun=$2 current=$3 latest=$4; shift 4
+  if [ -z "$current" ]; then
+    booch_status "installing ${noun:+$noun }${latest}..."
+    "$@"
+    booch_result "$label" installed "" "$latest"
+  elif [ "$current" != "$latest" ]; then
+    booch_status "updating ${noun:+$noun }${current} -> ${latest}..."
+    "$@"
+    booch_result "$label" updated "$current" "$latest"
+  else
+    booch_result "$label" current "$current"
+  fi
 }
 
 # concurrent から実際に起動されるラッパー。

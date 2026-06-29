@@ -20,7 +20,8 @@
 
 booch_delta_installed_version() {
   command -v delta >/dev/null 2>&1 || return 0
-  delta --version 2>/dev/null | awk '{print $2}'
+  # 1 行目の第 2 フィールドだけを取る（複数行出力でも版比較が壊れないよう exit で止める）。
+  delta --version 2>/dev/null | awk '{print $2; exit}'
 }
 
 booch_delta_latest() {
@@ -65,16 +66,7 @@ job_delta() {
 
   # delta は bare タグ（例: 0.18.2）で、資産名も bare 前提。万一 v 付きタグになっても
   # 永久更新ループに陥らないよう、比較は v を外して行う（資産名は raw タグのままなので、
-  # v 付きへ移行した場合は DL が 404 で明示失敗し、その時点で対応する）。
-  if [ -z "$current" ]; then
-    booch_status "installing delta ${latest}..."
-    booch_delta_install "$latest" "$arch"
-    booch_result "delta" installed "" "$latest"
-  elif [ "${current#v}" != "${latest#v}" ]; then
-    booch_status "updating delta ${current} -> ${latest}..."
-    booch_delta_install "$latest" "$arch"
-    booch_result "delta" updated "$current" "$latest"
-  else
-    booch_result "delta" current "$current"
-  fi
+  # v 付きへ移行した場合は DL が 404 で明示失敗し、その時点で対応する）。install には raw
+  # タグ "$latest" を渡す。
+  booch_job_sync "delta" "delta" "${current#v}" "${latest#v}" booch_delta_install "$latest" "$arch"
 }

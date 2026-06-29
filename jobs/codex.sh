@@ -10,7 +10,7 @@
 #   source "$BOOCH_ROOT/jobs/codex.sh"
 #   booch_job codex "Codex CLI" job_codex 120
 #
-# 依存: lib/arch.sh, lib/github.sh, curl, jq, tar, sudo。
+# 依存: lib/arch.sh, lib/github.sh, curl, jq, tar, sudo, find。
 #
 # テスト用の継ぎ目（seam）:
 #   booch_codex_installed_version  現在の版（未導入なら空）
@@ -45,13 +45,15 @@ booch_codex_install() { # tag arch
   trap 'rm -rf "$tmp"' RETURN
   booch_github_download_asset openai/codex "$tag" "${base}.tar.gz" "$tmp/${base}.tar.gz" || return 1
   tar -xzf "$tmp/${base}.tar.gz" -C "$tmp" || return 1
-  # 現在のリリースは tarball 最上位に <base> 単体のバイナリ（検証済み）。万一レイアウトが
-  # 変わったら install の不可解なエラーでなく明示エラーにする。
-  if [ ! -f "$tmp/${base}" ]; then
+  # 現在のリリースは tarball 最上位に <base> 単体のバイナリ。既知パスを優先し、レイアウト
+  # 差異（サブディレクトリ化や素の codex 名）には find でフォールバックする（circleci と同方針）。
+  local bin="$tmp/${base}"
+  [ -f "$bin" ] || bin=$(find "$tmp" -maxdepth 2 -type f \( -name "$base" -o -name codex \) -print -quit)
+  if [ -z "$bin" ] || [ ! -f "$bin" ]; then
     echo "codex: 展開後にバイナリが見つからない: ${base}" >&2
     return 1
   fi
-  sudo install -m 0755 "$tmp/${base}" /usr/local/bin/codex
+  sudo install -m 0755 "$bin" /usr/local/bin/codex
 }
 
 job_codex() {
@@ -63,16 +65,6 @@ job_codex() {
   # rust-v / v を外して正規化する。
   norm=${latest#rust-v}
   norm=${norm#v}
-
-  if [ -z "$current" ]; then
-    booch_status "installing codex ${norm}..."
-    booch_codex_install "$latest" "$arch"
-    booch_result "Codex CLI" installed "" "$norm"
-  elif [ "$current" != "$norm" ]; then
-    booch_status "updating codex ${current} -> ${norm}..."
-    booch_codex_install "$latest" "$arch"
-    booch_result "Codex CLI" updated "$current" "$norm"
-  else
-    booch_result "Codex CLI" current "$current"
-  fi
+  # 比較・表示は正規化版 norm、install には raw タグ "$latest" を渡す。
+  booch_job_sync "Codex CLI" "codex" "$current" "$norm" booch_codex_install "$latest" "$arch"
 }

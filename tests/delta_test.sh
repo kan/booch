@@ -94,6 +94,28 @@ test_delta_install_passes_correct_asset() {
   assert_eq "git-delta-musl_0.18.2_amd64.deb" "$cap_asset"
 }
 
+# 競合する動的版 git-delta が入っているときだけ purge してから musl .deb を入れる。
+# download/dpkg/sudo をスタブし、purge の発火条件を回帰ガードする（実 sudo 不要）。
+# shellcheck disable=SC2317  # スタブは install 内からのみ呼ばれる
+test_delta_install_purges_conflicting_dynamic_pkg() {
+  booch_github_download_asset() { : > "$4"; }     # DL 成功（空 .deb を作る）
+  dpkg() { [ "$1" = "-s" ] && return 0; return 0; }   # git-delta は導入済み
+  local cap=""; sudo() { cap="$cap|$*"; return 0; }
+  booch_delta_install 0.19.2 amd64 >/dev/null 2>&1
+  assert_contains "$cap" "dpkg -P git-delta"
+  assert_contains "$cap" "dpkg -i"
+}
+# 動的版が入っていなければ purge せず、そのまま musl .deb を入れる。
+# shellcheck disable=SC2317
+test_delta_install_skips_purge_when_absent() {
+  booch_github_download_asset() { : > "$4"; }
+  dpkg() { [ "$1" = "-s" ] && return 1; return 0; }   # git-delta 未導入
+  local cap=""; sudo() { cap="$cap|$*"; return 0; }
+  booch_delta_install 0.19.2 amd64 >/dev/null 2>&1
+  assert_not_contains "$cap" "dpkg -P"
+  assert_contains "$cap" "dpkg -i"
+}
+
 # --- runner 経由（declare -f でスタブが子へ運ばれること＋失敗時の自動 failed 記録） ---
 # shellcheck disable=SC2317  # スタブは runner の bash -c 子経由でのみ呼ばれる
 test_delta_via_runner_reports_installed() {

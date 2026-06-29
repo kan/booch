@@ -85,9 +85,21 @@ booch_go_install() { # <version>
 }
 
 # go install で導入するモジュールの版（go version -m のモジュール版）。未導入なら空。
+# PATH に出力先（~/go/bin 等）を通していない環境でも拾えるよう、command -v で見つからな
+# ければ go install の既定出力先（GOBIN / $(go env GOPATH)/bin）も確認する。
 booch_go_tool_version() { # bin
-  command -v "$1" >/dev/null 2>&1 || return 0
-  go version -m "$(command -v "$1")" 2>/dev/null | awk '/^[[:space:]]+mod/{print $3; exit}'
+  local bin gobin gopath
+  bin=$(command -v "$1" 2>/dev/null)
+  if [ -z "$bin" ]; then
+    gobin=$(go env GOBIN 2>/dev/null)
+    if [ -z "$gobin" ]; then
+      gopath=$(go env GOPATH 2>/dev/null)
+      [ -n "$gopath" ] && gobin="$gopath/bin"
+    fi
+    [ -n "$gobin" ] && [ -x "$gobin/$1" ] && bin="$gobin/$1"
+  fi
+  [ -n "$bin" ] || return 0
+  go version -m "$bin" 2>/dev/null | awk '/^[[:space:]]+mod/{print $3; exit}'
 }
 
 # モジュールを go install で最新へ導入/更新する（seam）。
@@ -129,17 +141,7 @@ job_go() {
     return 1
   fi
 
-  if [ -z "$current" ]; then
-    booch_status "installing ${latest}..."
-    booch_go_install "$latest"
-    booch_result "Go" installed "" "$latest"
-  elif [ "$current" != "$latest" ]; then
-    booch_status "updating ${current} -> ${latest}..."
-    booch_go_install "$latest"
-    booch_result "Go" updated "$current" "$latest"
-  else
-    booch_result "Go" current "$current"
-  fi
+  booch_job_sync "Go" "" "$current" "$latest" booch_go_install "$latest"
 
   # caller 指定の go ツール（powerline-go / gopls 等）を toolchain 導入後に入れる。
   booch_go_tools_ensure

@@ -9,17 +9,19 @@
 # 表せないため、そのジョブ側で個別に持つ。
 
 booch_arch_dpkg_style() {
-  case "$(uname -m)" in
+  local m; m=$(uname -m)
+  case "$m" in
     x86_64) printf 'amd64' ;;
     aarch64 | arm64) printf 'arm64' ;;
-    *) echo "arch: 未対応アーキテクチャ: $(uname -m)" >&2; return 1 ;;
+    *) echo "arch: 未対応アーキテクチャ: $m" >&2; return 1 ;;
   esac
 }
 
 booch_arch_rust_style() {
-  case "$(uname -m)" in
+  local m; m=$(uname -m)
+  case "$m" in
     x86_64) printf 'x86_64' ;;
     aarch64 | arm64) printf 'aarch64' ;;
-    *) echo "arch: 未対応アーキテクチャ: $(uname -m)" >&2; return 1 ;;
+    *) echo "arch: 未対応アーキテクチャ: $m" >&2; return 1 ;;
   esac
 }

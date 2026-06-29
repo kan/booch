@@ -72,16 +72,6 @@ job_circleci() {
   current=$(booch_circleci_installed_version)
   latest=$(booch_circleci_latest) || return 1
   ver=${latest#v}
-
-  if [ -z "$current" ]; then
-    booch_status "installing circleci ${ver}..."
-    booch_circleci_install "$latest" "$arch"
-    booch_result "CircleCI CLI" installed "" "$ver"
-  elif [ "$current" != "$ver" ]; then
-    booch_status "updating circleci ${current} -> ${ver}..."
-    booch_circleci_install "$latest" "$arch"
-    booch_result "CircleCI CLI" updated "$current" "$ver"
-  else
-    booch_result "CircleCI CLI" current "$current"
-  fi
+  # 比較・表示は v を外した ver、install には raw タグ "$latest" を渡す。
+  booch_job_sync "CircleCI CLI" "circleci" "$current" "$ver" booch_circleci_install "$latest" "$arch"
 }
