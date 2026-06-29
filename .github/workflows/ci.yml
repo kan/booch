@@ -13,7 +13,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: bash syntax check
         run: bash -n bin/booch install.sh lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
