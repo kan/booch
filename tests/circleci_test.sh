@@ -15,6 +15,8 @@ source "$BOOCH_ROOT/lib/runner.sh"
 source "$BOOCH_ROOT/lib/arch.sh"
 # shellcheck source=lib/github.sh
 source "$BOOCH_ROOT/lib/github.sh"
+# shellcheck source=lib/verify.sh
+source "$BOOCH_ROOT/lib/verify.sh"
 # shellcheck source=jobs/circleci.sh
 source "$BOOCH_ROOT/jobs/circleci.sh"
 
@@ -84,6 +86,23 @@ test_circleci_install_passes_correct_asset() {
   assert_eq "CircleCI-Public/circleci-cli" "$cap_repo"
   assert_eq "v0.1.38646" "$cap_tag"
   assert_eq "circleci-cli_0.1.38646_linux_amd64.tar.gz" "$cap_asset"
+}
+
+# checksums.txt の期待ハッシュと取得物が食い違えば、展開（tar）/ sudo へ進む前に失敗する。
+# download をスタブし、checksums には対象資産名 + 不正ハッシュを書いて不一致を作る。
+# shellcheck disable=SC2317
+test_circleci_install_aborts_on_checksum_mismatch() {
+  booch_github_download_asset() { # repo tag asset dest
+    case "$3" in
+      *checksums.txt) printf '%s  %s\n' \
+        0000000000000000000000000000000000000000000000000000000000000000 "circleci-cli_1.2.3_linux_amd64.tar.gz" > "$4" ;;
+      *) printf 'fake-tarball' > "$4" ;;
+    esac
+  }
+  local out rc; if out=$(booch_circleci_install v1.2.3 amd64 2>&1); then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  # tar 失敗ではなく verify が原因で止まったことを断定する（検証配線の回帰ガード）。
+  assert_contains "$out" "SHA256 検証に失敗"
 }
 
 run_tests

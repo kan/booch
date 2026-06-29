@@ -8,10 +8,11 @@
 # 使い方:
 #   source "$BOOCH_ROOT/lib/arch.sh"
 #   source "$BOOCH_ROOT/lib/github.sh"
+#   source "$BOOCH_ROOT/lib/verify.sh"
 #   source "$BOOCH_ROOT/jobs/circleci.sh"
 #   booch_job circleci "CircleCI CLI" job_circleci 120
 #
-# 依存: lib/arch.sh, lib/github.sh, curl, jq, tar, sudo, find。
+# 依存: lib/arch.sh, lib/github.sh, lib/verify.sh, curl, jq, tar, sudo, find。
 #
 # テスト用の継ぎ目（seam）:
 #   booch_circleci_installed_version  現在の版（未導入なら空）
@@ -42,9 +43,18 @@ booch_circleci_install() { # tag arch
   local tag=$1 arch=$2
   local ver=${tag#v}
   local base; base=$(booch_circleci_asset_base "$ver" "$arch")
+  local asset="${base}.tar.gz"
   local tmp; tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' RETURN
-  booch_github_download_asset CircleCI-Public/circleci-cli "$tag" "${base}.tar.gz" "$tmp/cci.tar.gz" || return 1
+  booch_github_download_asset CircleCI-Public/circleci-cli "$tag" "$asset" "$tmp/cci.tar.gz" || return 1
+  # 同リリースの checksums.txt（"<hash>  <filename>" 形式）を引き、tar.gz を展開前に
+  # 検証する。期待値が拾えない / 不一致なら sudo install へ進まず止める。
+  booch_github_download_asset CircleCI-Public/circleci-cli "$tag" \
+    "circleci-cli_${ver}_checksums.txt" "$tmp/checksums.txt" || return 1
+  if ! booch_verify_sha256 "$tmp/cci.tar.gz" "$(booch_verify_pick "$asset" < "$tmp/checksums.txt")"; then
+    echo "circleci: tar.gz の SHA256 検証に失敗: $asset" >&2
+    return 1
+  fi
   tar -xzf "$tmp/cci.tar.gz" -C "$tmp" || return 1
   # 既知パス（<base>/circleci）を優先し、レイアウト差異には find でフォールバックする。
   local bin="$tmp/${base}/circleci"

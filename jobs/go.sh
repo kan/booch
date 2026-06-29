@@ -7,6 +7,7 @@
 #
 # 使い方:
 #   source "$BOOCH_ROOT/lib/arch.sh"
+#   source "$BOOCH_ROOT/lib/verify.sh"
 #   source "$BOOCH_ROOT/jobs/go.sh"
 #   booch_job go "Go" job_go 300      # tarball 取得を含むため timeout は長めに
 #
@@ -16,7 +17,7 @@
 # 結果を記録する。例:
 #   export BOOCH_GO_TOOLS="github.com/justjanne/powerline-go golang.org/x/tools/gopls"
 #
-# 依存: lib/arch.sh, curl, tar, sudo（/usr/local/go へ展開する）, uname。
+# 依存: lib/arch.sh, lib/verify.sh, curl, tar, sudo（/usr/local/go へ展開する）, uname。
 # BOOCH_GO_TOOLS を使う場合は go（PATH 上）と $HOME/go/bin への書込権も要る。
 #
 # テスト用の継ぎ目（seam）。次の関数を上書きすると、ネットワーク / sudo 無しで
@@ -24,6 +25,7 @@
 #   booch_go_latest_version       最新版文字列を返す（例: go1.22.0）
 #   booch_go_installed_version    現在の版を返す（未導入なら空）
 #   booch_go_install <version>    実際の導入（副作用）
+#   booch_go_expected_sha256 <tarball>  tarball の公式 SHA256 を返す（未取得なら空）
 #   booch_go_tool_install <mod>   go install（副作用）
 #   booch_go_tool_version <bin>   go ツールの版を返す（未導入なら空）
 
@@ -41,6 +43,12 @@ booch_go_installed_version() {
 # Go の配布アーキ名（amd64 / arm64）。lib/arch.sh の dpkg 系ラッパー。
 booch_go_arch() { booch_arch_dpkg_style; }
 
+# go.dev が tarball ごとに公開する SHA256（本文は 64 桁 hex のみ）を引く。dl.google.com は
+# go.dev/dl の tarball 配布元と同一ホストで、`<tarball>.sha256` を素の hex で返す。
+booch_go_expected_sha256() { # tarball
+  booch_verify_fetch "https://dl.google.com/go/${1}.sha256" | awk '{print $1; exit}'
+}
+
 # 指定版を /usr/local/go へ導入する。取得・展開が失敗しても既存の install を
 # 壊さないよう、ステージディレクトリへ展開してから rename で入れ替える（同一
 # ファイルシステム上の mv はほぼ瞬時で原子的。古い install は入れ替え後に消す）。
@@ -56,6 +64,12 @@ booch_go_install() { # <version>
 
   if ! curl -fsSL "https://go.dev/dl/${tarball}" -o "$tmp/$tarball"; then
     echo "go: tarball の取得に失敗: $tarball" >&2
+    return 1
+  fi
+  # 展開前に公式 SHA256 と照合する。期待値が引けない / 不一致なら導入を止める
+  # （sudo で /usr/local/go を触る前に弾く）。
+  if ! booch_verify_sha256 "$tmp/$tarball" "$(booch_go_expected_sha256 "$tarball")"; then
+    echo "go: tarball の SHA256 検証に失敗: $tarball" >&2
     return 1
   fi
   sudo rm -rf "$stage"

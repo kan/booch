@@ -14,6 +14,8 @@ source "$TESTS_DIR/lib.sh"
 source "$BOOCH_ROOT/lib/runner.sh"
 # shellcheck source=lib/arch.sh
 source "$BOOCH_ROOT/lib/arch.sh"
+# shellcheck source=lib/verify.sh
+source "$BOOCH_ROOT/lib/verify.sh"
 # shellcheck source=jobs/go.sh
 source "$BOOCH_ROOT/jobs/go.sh"
 
@@ -113,6 +115,22 @@ test_go_tools_multiple_modules() {
   assert_contains "$out" "powerline-go|current"
   assert_contains "$out" "gopls|current"
   unset BOOCH_GO_TOOLS
+}
+
+# --- booch_go_install の SHA256 検証（curl/sudo をスタブし network/sudo 無しで） ---
+# 期待ハッシュと取得物が食い違えば、展開（tar）/ sudo の入替へ進む前に失敗する。
+# curl は -o 先（最終引数）へ偽 tarball を書き、sudo は no-op（RETURN trap の掃除も無害化）。
+# stub は間接呼び出しで shellcheck から到達不能に見える
+# shellcheck disable=SC2317
+test_go_install_aborts_on_checksum_mismatch() {
+  uname() { echo x86_64; }
+  curl() { local out; for out; do :; done; printf 'fake' > "$out"; }
+  sudo() { return 0; }
+  booch_go_expected_sha256() { printf '%s' 1111111111111111111111111111111111111111111111111111111111111111; }
+  local out rc; if out=$(booch_go_install go1.99.0 2>&1); then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  # sudo の入替へ進む前に verify が原因で止まったことを断定する（検証配線の回帰ガード）。
+  assert_contains "$out" "SHA256 検証に失敗"
 }
 
 # --- arch 検出（uname を関数で差し替え。実機アーキに依存しない） ---
