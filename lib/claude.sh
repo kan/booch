@@ -6,9 +6,9 @@
 # 使い方:
 #   source "$BOOCH_ROOT/lib/claude.sh"
 #   booch_claude_install
-#   booch_claude_marketplace_ensure comlinks/claude-plugin
+#   booch_claude_marketplace_ensure <owner>/<marketplace>
 #   booch_claude_marketplace_update_all
-#   booch_claude_plugin_ensure comlinks-tools@comlinks
+#   booch_claude_plugin_ensure <plugin>@<marketplace>
 #
 # PATH 上の claude は WSL 経由で Windows 版を拾うことがあるため、install.sh が置く
 # Linux 版（既定 ~/.local/bin/claude）に固定する。BOOCH_CLAUDE_BIN で上書き可能。
@@ -73,7 +73,7 @@ booch_claude_marketplace_update_all() {
 }
 
 # plugin が導入済みか。list の "❯ <plugin@source>" 行の id を完全一致で判定する
-# （非アンカー部分一致だと @comlinks が @comlinks2 を誤検出するため awk で第 2 フィールド一致）。
+# （非アンカー部分一致だと @foo が @foo2 を誤検出するため awk で第 2 フィールド一致）。
 booch_claude_plugin_installed() { # plugin@source
   booch_claude_run plugin list 2>/dev/null \
     | awk -v p="$1" '$1=="❯" && $2==p {found=1} END{exit !found}'

@@ -71,11 +71,11 @@ test_claude_marketplace_ensure_skips_when_present() {
   local cap=""
   booch_claude_run() {
     case "$*" in
-      "plugin marketplace list") printf '  ❯ comlinks\n    Source: GitHub (comlinks/claude-plugin)\n' ;;
+      "plugin marketplace list") printf '  ❯ acme\n    Source: GitHub (acme/claude-plugin)\n' ;;
       *) cap="$*" ;;
     esac
   }
-  booch_claude_marketplace_ensure comlinks/claude-plugin
+  booch_claude_marketplace_ensure acme/claude-plugin
   assert_eq "" "$cap" "登録済みなら add しない"
 }
 test_claude_marketplace_ensure_adds_when_absent() {
@@ -86,8 +86,8 @@ test_claude_marketplace_ensure_adds_when_absent() {
       *) cap="$*" ;;
     esac
   }
-  booch_claude_marketplace_ensure comlinks/claude-plugin
-  assert_eq "plugin marketplace add comlinks/claude-plugin" "$cap"
+  booch_claude_marketplace_ensure acme/claude-plugin
+  assert_eq "plugin marketplace add acme/claude-plugin" "$cap"
 }
 # 部分一致の誤検出ガード: foo/bar は (foo/bar-baz) にマッチせず add する。
 test_claude_marketplace_ensure_adds_when_only_substring_present() {
@@ -110,28 +110,28 @@ test_claude_marketplace_update_all_invokes_update() {
 
 # --- plugin 判定 / バージョン ---
 test_claude_plugin_installed_true() {
-  booch_claude_run() { case "$*" in "plugin list") printf '  ❯ comlinks-tools@comlinks\n    Version: 1.72.0\n' ;; esac; }
-  local rc; if booch_claude_plugin_installed comlinks-tools@comlinks; then rc=0; else rc=$?; fi
+  booch_claude_run() { case "$*" in "plugin list") printf '  ❯ acme-tools@acme\n    Version: 1.72.0\n' ;; esac; }
+  local rc; if booch_claude_plugin_installed acme-tools@acme; then rc=0; else rc=$?; fi
   assert_status 0 "$rc"
 }
 test_claude_plugin_installed_false() {
   booch_claude_run() { case "$*" in "plugin list") printf '  ❯ other@x\n    Version: 1.0.0\n' ;; esac; }
-  local rc; if booch_claude_plugin_installed comlinks-tools@comlinks; then rc=0; else rc=$?; fi
+  local rc; if booch_claude_plugin_installed acme-tools@acme; then rc=0; else rc=$?; fi
   assert_status 1 "$rc"
 }
-# 別 marketplace の同名 plugin（@comlinks2）を @comlinks と誤検出しない（id 完全一致）。
+# 別 marketplace の同名 plugin（@acme2）を @acme と誤検出しない（id 完全一致）。
 test_claude_plugin_installed_no_cross_marketplace_match() {
-  booch_claude_run() { case "$*" in "plugin list") printf '  ❯ comlinks-tools@comlinks2\n    Version: 9.9.9\n' ;; esac; }
-  local rc; if booch_claude_plugin_installed comlinks-tools@comlinks; then rc=0; else rc=$?; fi
+  booch_claude_run() { case "$*" in "plugin list") printf '  ❯ acme-tools@acme2\n    Version: 9.9.9\n' ;; esac; }
+  local rc; if booch_claude_plugin_installed acme-tools@acme; then rc=0; else rc=$?; fi
   assert_status 1 "$rc"
 }
 test_claude_plugin_version_reads_following_version_line() {
   booch_claude_run() {
     case "$*" in
-      "plugin list") printf '  ❯ comlinks-tools@comlinks\n    Version: 1.72.0\n  ❯ codex@openai-codex\n    Version: 1.0.5\n' ;;
+      "plugin list") printf '  ❯ acme-tools@acme\n    Version: 1.72.0\n  ❯ codex@openai-codex\n    Version: 1.0.5\n' ;;
     esac
   }
-  assert_eq "1.72.0" "$(booch_claude_plugin_version comlinks-tools@comlinks)"
+  assert_eq "1.72.0" "$(booch_claude_plugin_version acme-tools@acme)"
   assert_eq "1.0.5"  "$(booch_claude_plugin_version codex@openai-codex)"
 }
 # 対象ブロックに Version 行が無ければ、次ブロックの版を拾わず空を返す。
@@ -148,24 +148,24 @@ test_claude_plugin_version_empty_when_no_version_line() {
 test_claude_plugin_ensure_installs_when_absent() {
   local cap=""
   booch_claude_run() { case "$*" in "plugin list") printf '  ❯ other@x\n' ;; *) cap="$*" ;; esac; }
-  booch_claude_plugin_ensure comlinks-tools@comlinks
-  assert_eq "plugin install comlinks-tools@comlinks" "$cap"
+  booch_claude_plugin_ensure acme-tools@acme
+  assert_eq "plugin install acme-tools@acme" "$cap"
 }
 test_claude_plugin_ensure_updates_when_present() {
   local cap=""
-  booch_claude_run() { case "$*" in "plugin list") printf '  ❯ comlinks-tools@comlinks\n' ;; *) cap="$*" ;; esac; }
-  booch_claude_plugin_ensure comlinks-tools@comlinks
-  assert_eq "plugin update comlinks-tools@comlinks" "$cap"
+  booch_claude_run() { case "$*" in "plugin list") printf '  ❯ acme-tools@acme\n' ;; *) cap="$*" ;; esac; }
+  booch_claude_plugin_ensure acme-tools@acme
+  assert_eq "plugin update acme-tools@acme" "$cap"
 }
 # 導入済み plugin の update が失敗しても ensure は成功（|| true の許容）。
 test_claude_plugin_ensure_tolerates_update_failure() {
   booch_claude_run() {
     case "$*" in
-      "plugin list") printf '  ❯ comlinks-tools@comlinks\n' ;;
+      "plugin list") printf '  ❯ acme-tools@acme\n' ;;
       *) return 1 ;;   # update 失敗
     esac
   }
-  local rc; if booch_claude_plugin_ensure comlinks-tools@comlinks; then rc=0; else rc=$?; fi
+  local rc; if booch_claude_plugin_ensure acme-tools@acme; then rc=0; else rc=$?; fi
   assert_status 0 "$rc"
 }
 

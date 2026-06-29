@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # GitHub Releases ヘルパー。最新タグ取得とリリース資産のダウンロードを共通化する
-# （delta / codex / roji / circleci など、GitHub からバイナリを取るジョブが共用する）。
+# （delta / codex / circleci など、GitHub からバイナリを取るジョブが共用する）。
 #
 # 使い方:
 #   source "$BOOCH_ROOT/lib/github.sh"
