@@ -44,7 +44,9 @@ booch_delta_asset() { # tag arch
 booch_delta_install() { # tag arch
   local tag=$1 arch=$2
   local tmp; tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' RETURN
+  # 発火時に自身を解除し、RETURN トラップが呼び出し元へ漏れて再発火するのを防ぐ
+  # （呼び出し元の set -u 下で解放済みローカル変数を踏んで落ちないように）。
+  trap 'rm -rf "${tmp:-}"; trap - RETURN' RETURN
   # 先に DL してから入れ替える（network 失敗ならパージ前に抜ける）。go.sh のような
   # ステージ＋原子的入替ではなく purge→install だが、musl .deb は依存なしで dpkg も
   # ほぼトランザクショナルなため、パージ後に install 失敗する残存ウィンドウは小さい。

@@ -5,6 +5,24 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-29
+
+### Fixed
+
+- RETURN トラップの呼び出し元への漏れを修正（`lib/apt.sh` / `lib/uv.sh` / `lib/claude.sh`、
+  `jobs/{go,delta,codex,aws,circleci}.sh` の計 9 関数）。temp 掃除の `trap '...' RETURN` は
+  関数 return 後も解除されず呼び出し元のスコープに残り、呼び出し元の return 時に再発火する。
+  再発火時には内側のローカル変数（`tmp` / `stage` / `deb`）が消えているため、`set -uo pipefail`
+  で走る利用側 dotfiles で「未割り当て変数」エラーになりセットアップが中断していた。発火時に
+  自身を解除する trap（`trap '...; trap - RETURN' RETURN`）＋変数ガード（`${tmp:-}`）に統一した
+
+### Changed
+
+- `booch_claude_plugin_ensure` が導入結果を stdout にタブ区切り 1 行
+  `"<status>\t<old>\t<new>"`（status= installed | updated | current）で返すようにした。利用側
+  （ジョブ）はこれを受けて `booch_result` に installed / updated / current と版を記録できる
+  （役割分担はヘルパー＝動作・ジョブ＝報告のまま）。install 失敗時は従来どおり非 0 を返す
+
 ## [1.0.0] - 2026-06-29
 
 初回公開リリース。WSL2 / Ubuntu 向けの再実行可能な開発環境ブートストラップ基盤。
@@ -31,5 +49,6 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/kan/booch/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kan/booch/releases/tag/v1.0.0

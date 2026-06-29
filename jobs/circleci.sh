@@ -45,7 +45,9 @@ booch_circleci_install() { # tag arch
   local base; base=$(booch_circleci_asset_base "$ver" "$arch")
   local asset="${base}.tar.gz"
   local tmp; tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' RETURN
+  # 発火時に自身を解除し、RETURN トラップが呼び出し元へ漏れて再発火するのを防ぐ
+  # （呼び出し元の set -u 下で解放済みローカル変数を踏んで落ちないように）。
+  trap 'rm -rf "${tmp:-}"; trap - RETURN' RETURN
   booch_github_download_asset CircleCI-Public/circleci-cli "$tag" "$asset" "$tmp/cci.tar.gz" || return 1
   # 同リリースの checksums.txt（"<hash>  <filename>" 形式）を引き、tar.gz を展開前に
   # 検証する。期待値が拾えない / 不一致なら sudo install へ進まず止める。

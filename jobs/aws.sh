@@ -40,7 +40,9 @@ booch_aws_cli_latest() {
 booch_aws_cli_install() { # arch
   local arch=$1
   local tmp; tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' RETURN
+  # 発火時に自身を解除し、RETURN トラップが呼び出し元へ漏れて再発火するのを防ぐ
+  # （呼び出し元の set -u 下で解放済みローカル変数を踏んで落ちないように）。
+  trap 'rm -rf "${tmp:-}"; trap - RETURN' RETURN
   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${arch}.zip" -o "$tmp/awscli.zip" || return 1
   unzip -q "$tmp/awscli.zip" -d "$tmp" || return 1
   sudo "$tmp/aws/install" --update
@@ -65,7 +67,9 @@ booch_aws_ssm_install() { # arch
   local arch=$1 dir
   dir=$(booch_aws_ssm_deb_dir "$arch") || return 1
   local deb; deb=$(mktemp --suffix=.deb)
-  trap 'rm -f "$deb"' RETURN
+  # 発火時に自身を解除し、RETURN トラップが呼び出し元へ漏れて再発火するのを防ぐ
+  # （呼び出し元の set -u 下で解放済みローカル変数を踏んで落ちないように）。
+  trap 'rm -f "${deb:-}"; trap - RETURN' RETURN
   curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/${dir}/session-manager-plugin.deb" \
     -o "$deb" || return 1
   sudo dpkg -i "$deb"

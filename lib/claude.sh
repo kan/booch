@@ -8,7 +8,13 @@
 #   booch_claude_install
 #   booch_claude_marketplace_ensure <owner>/<marketplace>
 #   booch_claude_marketplace_update_all
-#   booch_claude_plugin_ensure <plugin>@<marketplace>
+#   booch_claude_plugin_ensure <plugin>@<marketplace>   # outcome を stdout に 1 行返す
+#
+# booch_claude_plugin_ensure は導入結果を stdout にタブ区切り 1 行
+# "<status>\t<old>\t<new>"（status= installed|updated|current）で返す。利用側（ジョブ）は
+# これを受けて booch_result を書ける（役割分担: ヘルパー=動作、ジョブ=報告）。例:
+#   IFS=$'\t' read -r status old new < <(booch_claude_plugin_ensure acme-tools@acme)
+#   booch_result "  acme-tools" "$status" "$old" "$new"
 #
 # PATH 上の claude は WSL 経由で Windows 版を拾うことがあるため、install.sh が置く
 # Linux 版（既定 ~/.local/bin/claude）に固定する。BOOCH_CLAUDE_BIN で上書き可能。
@@ -30,7 +36,9 @@ booch_claude_run() { "$BOOCH_CLAUDE_BIN" "$@"; }
 # 成功で隠れるため。apt.sh / github.sh / uv.sh と同じ方針）。
 booch_claude_install_script() {
   local tmp; tmp=$(mktemp)
-  trap 'rm -f "$tmp"' RETURN
+  # 発火時に自身を解除し、RETURN トラップが呼び出し元へ漏れて再発火するのを防ぐ
+  # （呼び出し元の set -u 下で解放済みローカル変数を踏んで落ちないように）。
+  trap 'rm -f "${tmp:-}"; trap - RETURN' RETURN
   curl -fsSL https://claude.ai/install.sh -o "$tmp" || return 1
   bash "$tmp" || return 1
 }
@@ -89,11 +97,22 @@ booch_claude_plugin_version() { # plugin@source
 }
 
 # plugin を冪等に用意する。導入済みなら update（失敗は致命でない）、未導入なら install。
-booch_claude_plugin_ensure() { # plugin@source
-  local plugin=$1
+# 導入結果を stdout にタブ区切り 1 行 "<status>\t<old>\t<new>"
+# （status= installed|updated|current）で返し、呼び出し側が booch_result を書けるようにする。
+# install 失敗は従来どおり非 0 を返す（出力は出さない）。update 失敗は許容し、版が変わら
+# なければ current として報告する。
+booch_claude_plugin_ensure() { # plugin@source -> "<status>\t<old>\t<new>"
+  local plugin=$1 old new status
   if booch_claude_plugin_installed "$plugin"; then
+    old=$(booch_claude_plugin_version "$plugin")
     booch_claude_run plugin update "$plugin" >/dev/null 2>&1 || true
+    new=$(booch_claude_plugin_version "$plugin")
+    if [ "$old" = "$new" ]; then status=current; else status=updated; fi
   else
-    booch_claude_run plugin install "$plugin"
+    old=""
+    booch_claude_run plugin install "$plugin" || return 1
+    new=$(booch_claude_plugin_version "$plugin")
+    status=installed
   fi
+  printf '%s\t%s\t%s\n' "$status" "$old" "$new"
 }

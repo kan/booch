@@ -59,8 +59,10 @@ booch_go_install() { # <version>
   local tmp; tmp=$(mktemp -d)
   local stage="/usr/local/go.new.$$" old="/usr/local/go.old.$$"
   # tmp と未完成ステージは必ず片付ける。古い install（$old）は残す（万一 swap が
-  # 途中で失敗しても直前の install を手で復旧できるようにするため）。
-  trap 'rm -rf "$tmp"; sudo rm -rf "$stage"' RETURN
+  # 途中で失敗しても直前の install を手で復旧できるようにするため）。発火時に自身を
+  # 解除し、RETURN トラップが呼び出し元へ漏れて再発火するのを防ぐ（呼び出し元の
+  # set -u 下で解放済みローカル変数を踏んで落ちないように）。
+  trap 'rm -rf "${tmp:-}"; sudo rm -rf "${stage:-}"; trap - RETURN' RETURN
 
   if ! curl -fsSL "https://go.dev/dl/${tarball}" -o "$tmp/$tarball"; then
     echo "go: tarball の取得に失敗: $tarball" >&2

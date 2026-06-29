@@ -43,7 +43,10 @@ booch_apt_install_key() { # url keyring mode
   esac
 
   local tmp; tmp=$(mktemp)
-  trap 'rm -f "$tmp"' RETURN   # 成否いずれの経路でも temp を片付ける
+  # 成否いずれの経路でも temp を片付ける。発火時に自身を解除し（`trap - RETURN`）、
+  # RETURN トラップが呼び出し元の return まで漏れて再発火するのを防ぐ（呼び出し元が
+  # `set -u` だと、解放済みローカル変数を踏んで「未割り当て変数」で落ちるため）。
+  trap 'rm -f "${tmp:-}"; trap - RETURN' RETURN
 
   # curl を temp に落としてから処理する（パイプにせず失敗を確実に捕捉する）。
   if ! curl -fsSL "$url" -o "$tmp"; then

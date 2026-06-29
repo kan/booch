@@ -42,7 +42,9 @@ booch_codex_install() { # tag arch
   local tag=$1 arch=$2
   local base; base=$(booch_codex_artifact "$arch")
   local tmp; tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' RETURN
+  # 発火時に自身を解除し、RETURN トラップが呼び出し元へ漏れて再発火するのを防ぐ
+  # （呼び出し元の set -u 下で解放済みローカル変数を踏んで落ちないように）。
+  trap 'rm -rf "${tmp:-}"; trap - RETURN' RETURN
   booch_github_download_asset openai/codex "$tag" "${base}.tar.gz" "$tmp/${base}.tar.gz" || return 1
   tar -xzf "$tmp/${base}.tar.gz" -C "$tmp" || return 1
   # 現在のリリースは tarball 最上位に <base> 単体のバイナリ。既知パスを優先し、レイアウト

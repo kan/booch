@@ -165,8 +165,67 @@ test_claude_plugin_ensure_tolerates_update_failure() {
       *) return 1 ;;   # update 失敗
     esac
   }
-  local rc; if booch_claude_plugin_ensure acme-tools@acme; then rc=0; else rc=$?; fi
+  local rc; if booch_claude_plugin_ensure acme-tools@acme >/dev/null; then rc=0; else rc=$?; fi
   assert_status 0 "$rc"
+}
+
+# --- plugin_ensure の outcome 出力（呼び出し側が booch_result を書けるよう stdout で返す） ---
+# 版判定の booch_claude_run は pipeline 経由（サブシェル）で呼ばれカウンタが持てないため、
+# install/update の前後状態は temp ファイルで表現する（list はその時点の状態を反映する）。
+# 未導入なら install 後に "installed\t\t<new>" を返す。
+test_claude_plugin_ensure_outputs_installed() {
+  local sf; sf=$(mktemp); : > "$sf"   # 空 = 未導入
+  booch_claude_run() {
+    case "$*" in
+      "plugin list")
+        if [ -s "$sf" ]; then printf '  ❯ acme-tools@acme\n    Version: %s\n' "$(cat "$sf")"
+        else printf '  ❯ other@x\n'; fi ;;
+      "plugin install acme-tools@acme") printf '2.0.0' > "$sf" ;;
+    esac
+  }
+  local out; out=$(booch_claude_plugin_ensure acme-tools@acme)
+  rm -f "$sf"
+  assert_eq "$(printf 'installed\t\t2.0.0')" "$out"
+}
+
+# 導入済みで版が変われば "updated\t<old>\t<new>"（update が状態ファイルの版を上げる）。
+test_claude_plugin_ensure_outputs_updated() {
+  local sf; sf=$(mktemp); printf '1.0.0' > "$sf"
+  booch_claude_run() {
+    case "$*" in
+      "plugin list") printf '  ❯ acme-tools@acme\n    Version: %s\n' "$(cat "$sf")" ;;
+      "plugin update acme-tools@acme") printf '1.1.0' > "$sf" ;;
+      *) : ;;
+    esac
+  }
+  local out; out=$(booch_claude_plugin_ensure acme-tools@acme)
+  rm -f "$sf"
+  assert_eq "$(printf 'updated\t1.0.0\t1.1.0')" "$out"
+}
+
+# 導入済みで版が変わらなければ "current\t<v>\t<v>"。
+test_claude_plugin_ensure_outputs_current_when_unchanged() {
+  booch_claude_run() {
+    case "$*" in
+      "plugin list") printf '  ❯ acme-tools@acme\n    Version: 3.0.0\n' ;;
+      *) : ;;
+    esac
+  }
+  assert_eq "$(printf 'current\t3.0.0\t3.0.0')" "$(booch_claude_plugin_ensure acme-tools@acme)"
+}
+
+# install 失敗は非 0 を返し、outcome 行は出さない（従来の失敗伝播を保つ）。
+test_claude_plugin_ensure_install_failure_returns_error_without_output() {
+  booch_claude_run() {
+    case "$*" in
+      "plugin list") printf '  ❯ other@x\n' ;;   # 未導入
+      *) return 1 ;;                              # install 失敗
+    esac
+  }
+  local out rc
+  if out=$(booch_claude_plugin_ensure acme-tools@acme 2>/dev/null); then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "" "$out" "失敗時は outcome を出さない"
 }
 
 run_tests

@@ -33,7 +33,9 @@ booch_uv_self_update() { uv self update >/dev/null 2>&1; }
 # sh の成功で隠れるため。apt.sh / github.sh と同じ方針）。
 booch_uv_bootstrap_install() {
   local tmp; tmp=$(mktemp)
-  trap 'rm -f "$tmp"' RETURN
+  # 発火時に自身を解除し、RETURN トラップが呼び出し元へ漏れて再発火するのを防ぐ
+  # （呼び出し元の set -u 下で解放済みローカル変数を踏んで落ちないように）。
+  trap 'rm -f "${tmp:-}"; trap - RETURN' RETURN
   curl -LsSf https://astral.sh/uv/install.sh -o "$tmp" || return 1
   sh "$tmp" >/dev/null 2>&1 || return 1
 }
