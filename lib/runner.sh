@@ -45,6 +45,14 @@ else
   _BOOCH_COLOR_CYAN=''; _BOOCH_COLOR_DIM=''; _BOOCH_COLOR_RESET=''
 fi
 
+# booch のバージョン（ルートの VERSION ファイルの 1 行目）。無ければ "unknown"。
+# 消費側（dotfiles / doctor 等）や bin/booch が実行時に版を名乗るために使う。
+booch_version() {
+  local vf="$BOOCH_ROOT/VERSION" v=""
+  [ -r "$vf" ] && read -r v < "$vf"
+  printf '%s\n' "${v:-unknown}"
+}
+
 # 各ジョブの既定タイムアウト（秒）。booch_job の第 4 引数で個別上書き可能。
 BOOCH_JOB_TIMEOUT_DEFAULT="${BOOCH_JOB_TIMEOUT_DEFAULT:-120}"
 

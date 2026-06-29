@@ -1,6 +1,7 @@
 # booch
 
 [![CI](https://github.com/kan/booch/actions/workflows/ci.yml/badge.svg)](https://github.com/kan/booch/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kan/booch?sort=semver)](https://github.com/kan/booch/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Shell: Bash](https://img.shields.io/badge/shell-bash-4EAA25?logo=gnu-bash&logoColor=white)
 ![Platform: WSL2 / Ubuntu](https://img.shields.io/badge/platform-WSL2%20%2F%20Ubuntu-E95420?logo=ubuntu&logoColor=white)
@@ -20,7 +21,7 @@ dotfiles に残し、booch は汎用部分だけを担う。
 ```
 booch/
 ├── bin/
-│   └── booch                     # CLI（init: 利用側 dotfiles 雛形の生成）
+│   └── booch                     # CLI（init: dotfiles 雛形の生成 / version）
 ├── lib/
 │   ├── runner.sh                 # 並列ジョブランナー（bash-concurrent 上に構築）
 │   ├── color.sh                  # 色（ANSI）の共通定義（tty/NO_COLOR gate）
@@ -51,11 +52,13 @@ booch/
 │   ├── bash-concurrent/          # 並列実行ライブラリ（MIT, vendoring してコミット）
 │   └── update.sh                 # vendor 更新スクリプト（メンテ用）
 ├── tests/                        # ユニットテスト（依存なし）+ runner スモーク（smoke.sh）
-└── examples/                     # 利用側向けの使い方サンプル
-    ├── README.md                 # サンプルの読む順番
-    ├── custom-job.sh             # 最小: booch を source して custom job を登録
-    ├── bootstrap.sh              # 現実例: 提供ジョブを sudo 事前キャッシュ付きで一括導入
-    └── lib-helpers.sh            # fs / confirm / sudo ヘルパーの小サンプル
+├── examples/                     # 利用側向けの使い方サンプル
+│   ├── README.md                 # サンプルの読む順番
+│   ├── custom-job.sh             # 最小: booch を source して custom job を登録
+│   ├── bootstrap.sh              # 現実例: 提供ジョブを sudo 事前キャッシュ付きで一括導入
+│   └── lib-helpers.sh            # fs / confirm / sudo ヘルパーの小サンプル
+├── VERSION                       # SemVer（booch version / git タグ v<...> と一致）
+└── CHANGELOG.md                  # 変更履歴（Keep a Changelog）
 ```
 
 ## 前提
@@ -160,14 +163,25 @@ bin/booch init ~/dotfiles
 | `config/README.md` | symlink で `$HOME` 配下へ配置する設定ファイルの置き場 |
 | `.gitignore` / `README.md` | dotfiles リポジトリのひな形 |
 
-雛形には個人固有・業務固有の値を埋め込まず、プレースホルダで示す。booch 本体は **git
-submodule（`vendor/booch`）** での取り込みを推奨する（雛形の `README.md` に手順を記載）。
+雛形には個人固有・業務固有の値を埋め込まず、プレースホルダで示す。
+
+### booch 本体の取り込み（推奨: git submodule + リリースタグ pin）
+
+再現性のため、booch は **git submodule で取り込み、リリースタグに固定**するのを推奨する。
+更新するときは submodule を新しいタグへ進める（いつ・どの版に上げたかが履歴に残る）。
 
 ```bash
 cd ~/dotfiles
-git init && git submodule add https://github.com/kan/booch vendor/booch
+git init
+git submodule add https://github.com/kan/booch vendor/booch
+git -C vendor/booch checkout v1.0.0   # リリースタグに固定（更新時はタグを上げる）
+git submodule update --init --recursive
 bash bootstrap.sh
 ```
+
+`bootstrap.sh` は `BOOCH_ROOT` を `vendor/booch` に既定で向ける。別の場所に置いた clone を
+使いたい場合（例: `~/dotfiles` の隣に `~/booch` を clone して最新を追従する運用）は
+`BOOCH_ROOT` を上書きすればよい。取り込んだ版は `booch version` で確認できる。
 
 個々のパターン（custom job・symlink 配置・提供ジョブの組み合わせ）を単体で見たいときは
 `examples/`（上記「サンプル」）を参照する。

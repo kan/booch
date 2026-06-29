@@ -87,6 +87,11 @@ test_undefined_job_fn_rejected() {
   assert_status 1 "$rc"
 }
 
+# booch_version はルートの VERSION を読む（消費側が実行時に版を名乗れる）。
+test_booch_version_reads_version_file() {
+  assert_eq "$(cat "$BOOCH_ROOT/VERSION")" "$(booch_version)"
+}
+
 # ジョブ名のディレクトリ脱出・空名を拒否する（結果ファイルが結果ディレクトリ外へ
 # 書き出されるのを防ぐ。Codex 監査指摘）。
 test_job_name_rejects_path_escape() {

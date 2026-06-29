@@ -122,6 +122,7 @@ GITIGNORE
 
 ```bash
 git submodule add https://github.com/kan/booch vendor/booch   # 初回のみ
+git -C vendor/booch checkout <最新リリースタグ>                # 例: v1.0.0（再現性のため固定）
 git submodule update --init --recursive
 bash bootstrap.sh
 ```

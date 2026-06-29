@@ -12,6 +12,7 @@ booch - WSL2 / Ubuntu 向け開発環境ブートストラップ基盤
 
 使い方:
   booch init <dir>    利用側 dotfiles リポジトリの雛形を <dir> に生成する（冪等）
+  booch version       バージョンを表示する
   booch help          このヘルプを表示する
 
 ランナー／ライブラリとしての使い方は README.md を参照。
@@ -24,6 +25,10 @@ case "$cmd" in
     shift
     source "$BOOCH_ROOT/lib/scaffold.sh"
     booch_scaffold "${1:-}"
+    ;;
+  version | -V | --version)
+    source "$BOOCH_ROOT/lib/runner.sh"
+    booch_version
     ;;
   help | -h | --help)
     _booch_usage
