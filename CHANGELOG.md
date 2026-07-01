@@ -5,8 +5,16 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-07-01
+
 ### Added
 
+- `booch help <name>` サブコマンドを追加。`lib/*.sh` / `jobs/*.sh` の冒頭ヘッダコメントと
+  公開関数シグネチャ（`booch_xxx() { # args` 宣言）を抽出して表示する。引数なしの
+  `booch help` はモジュール一覧（各 1 行説明付き）を出す。従来はモジュールの API を知るには
+  ソースを直接開くしかなく、AI / 利用者が使い方を把握しづらかった。抽出ロジックは
+  `lib/apidoc.sh` に切り出し（正本はソース。説明を二重管理しない）、将来の docs 生成でも
+  再利用できるようにした
 - `lib/doctor.sh` のラベル列幅を環境変数 `BOOCH_DOCTOR_LABEL_WIDTH`（既定 30）で
   上書きできるようにした。`booch_doctor_row` の列幅が `%-30s` 固定で、30 桁を超える
   ラベルが状態列（`[OK]` / `[WARN]` 等）とくっついて桁揃えが崩れていた。利用側が自分の
@@ -56,6 +64,7 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/kan/booch/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/kan/booch/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kan/booch/releases/tag/v1.0.0

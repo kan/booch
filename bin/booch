@@ -11,9 +11,10 @@ _booch_usage() {
 booch - WSL2 / Ubuntu 向け開発環境ブートストラップ基盤
 
 使い方:
-  booch init <dir>    利用側 dotfiles リポジトリの雛形を <dir> に生成する（冪等）
-  booch version       バージョンを表示する
-  booch help          このヘルプを表示する
+  booch init <dir>     利用側 dotfiles リポジトリの雛形を <dir> に生成する（冪等）
+  booch version        バージョンを表示する
+  booch help           このヘルプ + モジュール一覧を表示する
+  booch help <name>    モジュール（例: fs / doctor / go）の API を表示する
 
 ランナー／ライブラリとしての使い方は README.md を参照。
 USAGE
@@ -31,7 +32,15 @@ case "$cmd" in
     booch_version
     ;;
   help | -h | --help)
-    _booch_usage
+    shift
+    source "$BOOCH_ROOT/lib/apidoc.sh"
+    if [ -n "${1:-}" ]; then
+      booch_apidoc_show "$1"        # booch help <name>: モジュール詳細
+    else
+      _booch_usage
+      printf '\n'
+      booch_apidoc_index            # booch help: ヘルプ + モジュール一覧
+    fi
     ;;
   "")
     _booch_usage >&2

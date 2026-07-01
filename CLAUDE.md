@@ -86,14 +86,26 @@ lib にも等しく効く。加えて:
 
 - **各ヘルパーの使い方・依存・seam はファイル冒頭コメントを正本にする**。README には 1 行
   説明だけ置く（README＝俯瞰、header＝個別 API の分担。重複させない）。
+- **公開 API は `booch help <name>` で引ける**（`lib/apidoc.sh` がヘッダと公開関数シグネチャを
+  ソースから抽出して表示する。jobs/ も同様）。この出力はソース生成なので、関数を追加・変更
+  したら次を守ると help がそのまま API doc になる（別途 doc をメンテしない）:
+  - **ファイル冒頭ヘッダの最初の非空行を、自己完結した 1 行説明にする**（`booch help` の索引に
+    出る）。
+  - **公開関数の宣言に引数ヒントを付ける**（`booch_xxx() { # arg1 arg2 [opt]`）。help が
+    `booch_xxx(arg1 arg2 [opt])` として表示する。内部関数（`_booch_*`）は help に出ない
+    ので、公開したい関数は `booch_` プレフィックスで書く（鉄則 3 と同じ境界）。
+  - 新しい lib/jobs を足せば `booch help` に自動で載る（登録簿の更新は不要）。抽出規約の
+    詳細は `lib/apidoc.sh` の冒頭コメントを正本にする。
 - **ネットワーク / sudo を伴う処理は seam に切り出す**（jobs/ と同じ方針）。`booch_github_fetch`
   / `booch_verify_fetch` のような副作用関数を分け、分岐ロジックをスタブで純粋にテストできる
   ようにする。
 
 ## CLI（bin/booch）と雛形（lib/scaffold.sh）
 
-`bin/booch` は補助 CLI（現状 `init` のみ）で、本体はあくまで source して使うライブラリ。
+`bin/booch` は補助 CLI（`init` / `version` / `help`）で、本体はあくまで source して使うライブラリ。
 `init` は `lib/scaffold.sh` の `booch_scaffold <dir>` に委譲し、利用側 dotfiles の雛形を作る。
+`help` は `lib/apidoc.sh` に委譲し、引数なしでモジュール一覧、`help <name>` でモジュールの
+ヘッダ + 公開関数シグネチャを表示する（上記「ライブラリヘルパー」の help 維持規約を参照）。
 
 - **雛形は quoted heredoc（`<<'MARK'`）で書く**。`$BOOCH_ROOT` 等を生成時に展開させないため。
   生成物に個人固有・業務固有の値を埋め込まず、プレースホルダ（`<...>` / `(edit me)`）で示す。
