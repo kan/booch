@@ -13,6 +13,9 @@
 # status: ok | missing | outdated | warn | skip
 #
 # 集計状態（公開）: BOOCH_DOCTOR_MISSING / _OUTDATED / _WARN（0/1）
+#
+# ラベル列の幅（公開）: BOOCH_DOCTOR_LABEL_WIDTH（既定 30）。利用側が自分のラベル集合の
+# 最長幅に合わせて上書きできる。正の整数以外を渡すと既定 30 にフォールバックする。
 
 # 色は lib/color.sh に集約（_BOOCH_COLOR_*）。BOOCH_ROOT 未設定時は本ファイルから推定。
 if [ -z "${BOOCH_ROOT:-}" ]; then
@@ -51,33 +54,46 @@ booch_ver_norm() { # version
   printf '%s' "$v"
 }
 
+# ラベル列の幅を解決する。BOOCH_DOCTOR_LABEL_WIDTH を優先し、正の整数以外
+# （非数値・0・負・空）は既定 30 へフォールバックする（%-*s の幅引数に非数値が
+# 渡って printf が壊れるのを防ぐ）。
+_booch_doctor_label_width() {
+  local w=${BOOCH_DOCTOR_LABEL_WIDTH:-30}
+  case "$w" in
+    ''|*[!0-9]*) w=30 ;;   # 空・非数値（符号含む）は既定へ
+  esac
+  [ "$w" -gt 0 ] 2>/dev/null || w=30
+  printf '%s' "$w"
+}
+
 # 1 行を描画し、status に応じて集計を更新する。
 booch_doctor_row() { # label status [value] [note]
   local label=$1 status=$2 value=${3:-} note=${4:-}
+  local w; w=$(_booch_doctor_label_width)
   case "$status" in
     ok)
-      printf '  %-30s %s[OK]%s  %s\n' \
-        "$label" "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$value" ;;
+      printf '  %-*s %s[OK]%s  %s\n' \
+        "$w" "$label" "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$value" ;;
     outdated)
-      printf '  %-30s %s[OK]%s  %-20s %s(update available: %s)%s\n' \
-        "$label" "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$value" \
+      printf '  %-*s %s[OK]%s  %-20s %s(update available: %s)%s\n' \
+        "$w" "$label" "$_BOOCH_COLOR_GREEN" "$_BOOCH_COLOR_RESET" "$value" \
         "$_BOOCH_COLOR_YELLOW" "$note" "$_BOOCH_COLOR_RESET"
       BOOCH_DOCTOR_OUTDATED=1 ;;
     missing)
-      printf '  %-30s %s[MISSING]%s %s\n' \
-        "$label" "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" "$value"
+      printf '  %-*s %s[MISSING]%s %s\n' \
+        "$w" "$label" "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" "$value"
       BOOCH_DOCTOR_MISSING=1 ;;
     warn)
-      printf '  %-30s %s[WARN]%s %s\n' \
-        "$label" "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$value"
+      printf '  %-*s %s[WARN]%s %s\n' \
+        "$w" "$label" "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$value"
       BOOCH_DOCTOR_WARN=1 ;;
     skip)
-      printf '  %-30s %s[SKIP]%s %s\n' \
-        "$label" "$_BOOCH_COLOR_DIM" "$_BOOCH_COLOR_RESET" "$value" ;;
+      printf '  %-*s %s[SKIP]%s %s\n' \
+        "$w" "$label" "$_BOOCH_COLOR_DIM" "$_BOOCH_COLOR_RESET" "$value" ;;
     *)
       # 未知 status（呼び出し側のタイポ等）を黙って通すと、欠落が「all good」に
       # 化ける。診断を stderr に出し、警告として集計に残す。
-      printf '  %-30s %s\n' "$label" "$value"
+      printf '  %-*s %s\n' "$w" "$label" "$value"
       printf 'booch_doctor_row: 未知の status: %s（%s）\n' "$status" "$label" >&2
       BOOCH_DOCTOR_WARN=1 ;;
   esac

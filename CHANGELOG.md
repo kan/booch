@@ -5,6 +5,13 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `lib/doctor.sh` のラベル列幅を環境変数 `BOOCH_DOCTOR_LABEL_WIDTH`（既定 30）で
+  上書きできるようにした。`booch_doctor_row` の列幅が `%-30s` 固定で、30 桁を超える
+  ラベルが状態列（`[OK]` / `[WARN]` 等）とくっついて桁揃えが崩れていた。利用側が自分の
+  ラベル集合の最長幅に合わせて渡せる。正の整数以外は既定 30 にフォールバックする
+
 ## [1.0.1] - 2026-06-29
 
 ### Fixed

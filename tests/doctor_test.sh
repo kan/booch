@@ -109,6 +109,48 @@ test_doctor_row_unknown_status_warns() {
   assert_eq "1" "$BOOCH_DOCTOR_WARN"
 }
 
+# --- ラベル列幅（BOOCH_DOCTOR_LABEL_WIDTH） ---
+# ラベル "go" が幅 w のフィールドに左詰めされ、直後の書式空白 1 つを挟んで [OK] が続く。
+# → "go" と "[OK]" の間の空白は (w-2)+1 個になる。期待文字列を計算で組む（目視の桁数固定を避ける）。
+_expect_go_ok() { # width
+  local w=$1 pad
+  pad=$(printf '%*s' "$((w - 2 + 1))" '')
+  printf 'go%s[OK]' "$pad"
+}
+# 既定 30 では 30 桁未満のラベルはパディングで状態列まで隙間が空く。
+test_doctor_row_default_width_pads_short_label() {
+  booch_doctor_init
+  local out; out=$(booch_doctor_row "go" ok "v")
+  assert_contains "$out" "$(_expect_go_ok 30)"
+}
+# env で幅を広げるとパディングが伸びる（既定 30 では出ない幅の空白列になる）。
+test_doctor_row_env_widens_padding() {
+  booch_doctor_init
+  local out; out=$(BOOCH_DOCTOR_LABEL_WIDTH=40 booch_doctor_row "go" ok "v")
+  assert_contains "$out" "$(_expect_go_ok 40)"
+  assert_not_contains "$out" "$(_expect_go_ok 30)"   # 30 幅では出ない空白列であること
+}
+# 30 桁超のラベルでも状態が潰れず、ラベルと [OK] の間に区切り空白が残る
+# （%-*s なのでフィールドを越えたぶんは押し出され、書式内の空白 1 つは必ず入る）。
+test_doctor_row_long_label_not_crushed() {
+  booch_doctor_init
+  local long="typescript-language-server-and-more-42chars"
+  local out; out=$(BOOCH_DOCTOR_LABEL_WIDTH=40 booch_doctor_row "$long" ok "v")
+  assert_contains "$out" "$long [OK]"
+}
+# 非数値 env は既定 30 にフォールバックする（%-*s の幅引数破壊を防ぐ）。
+test_doctor_row_nonnumeric_width_falls_back() {
+  booch_doctor_init
+  local out; out=$(BOOCH_DOCTOR_LABEL_WIDTH=abc booch_doctor_row "go" ok "v")
+  assert_contains "$out" "$(_expect_go_ok 30)"
+}
+# 0 / 負値も既定 30 へフォールバックする。
+test_doctor_row_zero_width_falls_back() {
+  booch_doctor_init
+  local out; out=$(BOOCH_DOCTOR_LABEL_WIDTH=0 booch_doctor_row "go" ok "v")
+  assert_contains "$out" "$(_expect_go_ok 30)"
+}
+
 # --- 集計とリセット ---
 test_doctor_init_resets_flags() {
   BOOCH_DOCTOR_MISSING=1; BOOCH_DOCTOR_OUTDATED=1; BOOCH_DOCTOR_WARN=1
