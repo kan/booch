@@ -131,4 +131,40 @@ test_toml_dotted_key_is_literal_match() {
   rm -f "$f"
 }
 
+# トップレベルに未存在で、かつファイルがセクションを含むとき、EOF 追記だとセクション内へ
+# 入り込むため、最初のセクションヘッダの直前へ挿入する。
+test_toml_inserts_before_section_when_absent() {
+  local f; f=$(mktemp)
+  printf '[notice]\nx = 1\n' > "$f"
+  booch_set_toml_key "$f" model '"y"'
+  assert_eq 'model = "y"
+[notice]
+x = 1' "$(cat "$f")"
+  rm -f "$f"
+}
+
+# トップレベルのキー更新は、セクション内の同名キーに触れない。
+test_toml_updates_top_level_not_section() {
+  local f; f=$(mktemp)
+  printf 'model = "old"\n[s]\nmodel = "sectioned"\n' > "$f"
+  booch_set_toml_key "$f" model '"new"'
+  assert_eq 'model = "new"
+[s]
+model = "sectioned"' "$(cat "$f")"
+  rm -f "$f"
+}
+
+# トップレベルに未存在・セクション内に同名キーがあるとき、セクション内を書き換えず
+# トップレベル（最初のセクション前）へ挿入する（codex model_instructions_file 実害の回帰）。
+test_toml_absent_top_present_section_inserts_top() {
+  local f; f=$(mktemp)
+  printf 'a = 1\n[s]\nmodel = "sectioned"\n' > "$f"
+  booch_set_toml_key "$f" model '"new"'
+  assert_eq 'a = 1
+model = "new"
+[s]
+model = "sectioned"' "$(cat "$f")"
+  rm -f "$f"
+}
+
 run_tests

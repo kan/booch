@@ -5,6 +5,25 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `lib/doctor.sh` に `booch_doctor_symlinks "src|dest"...` を追加。配置一覧を受け取り、各リンク先が
+  期待どおり src を指す symlink かを診断する（実体上書き・リンク切れ・宛先ずれ・未配置を warn で
+  可視化。配置は再実行で冪等に直る前提のため missing=終了 1 にはしない）。
+- `lib/doctor.sh` に `booch_doctor_apt_untracked <tracked...>` を追加。`apt-mark showmanual` と
+  引数で渡した追跡集合の差分を監査する opt-in 機構（`BOOCH_DOCTOR_APT_AUDIT=1` のときだけ
+  `apt-mark` を走らせ件数＋一覧を出す。既定は案内行のみ）。
+- `booch_doctor_apt_pkg` を command 無しパッケージ対応に一般化。command 引数が空のときは
+  `command -v` ではなく dpkg の install 状態で存在判定する（`language-pack-ja` のように対応
+  コマンドを持たないパッケージ向け）。既存の 3 引数（command 非空）呼び出しの挙動は不変。
+
+### Fixed
+
+- `booch_set_toml_key` がトップレベルキーを EOF 追記していたため、ファイルが末尾でセクションを
+  含む場合にキーがそのセクション内に入り込み、`[section].key` として解釈されて無効化していた
+  （codex の `model_instructions_file` が実際に無効化した実害あり）。トップレベルキーは最初の
+  `[section]` ヘッダより前で置換／挿入し、セクション内の同名キーには触れないよう修正した。
+
 ## [1.0.2] - 2026-07-01
 
 ### Added

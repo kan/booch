@@ -185,9 +185,16 @@ booch_doctor_prefetch_cleanup() {
 # outdated とする（サードパーティ repo 無効化で candidate がディストリ版へ落ちた場合に
 # ダウングレードを更新と誤表示しないよう、文字列比較ではなく dpkg のバージョン比較を使う）。
 # どのパッケージを診るかは利用側が決める。
+# 存在判定: command が非空ならそのコマンドの有無で、空なら dpkg の install 状態で判定する
+# （language-pack-ja のように対応コマンドを持たないパッケージ向け）。
 booch_doctor_apt_pkg() { # label command package
   local label=$1 cmd=$2 pkg=$3
-  if ! command -v "$cmd" >/dev/null 2>&1; then
+  if [ -n "$cmd" ]; then
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      booch_doctor_row "$label" missing
+      return
+    fi
+  elif [ "$(dpkg-query -W -f='${db:Status-Status}' "$pkg" 2>/dev/null)" != "installed" ]; then
     booch_doctor_row "$label" missing
     return
   fi
@@ -198,5 +205,54 @@ booch_doctor_apt_pkg() { # label command package
     booch_doctor_row "$label" outdated "$installed" "$candidate"
   else
     booch_doctor_row "$label" ok "$installed"
+  fi
+}
+
+# symlink 配置の診断。各引数は "src|dest"（利用側が配置一覧を渡す）。dest が期待どおり src を
+# 指す symlink かを見て、実体上書き・リンク切れ・宛先ずれ・未配置を warn で可視化する。配置は
+# 再実行で冪等に直る前提なので、未配置でも missing（終了 1）にはせず warn にとどめる。ラベルは
+# dest（$HOME を ~ に短縮）。src / dest に `|` を含む用途は想定しない。
+booch_doctor_symlinks() { # "src|dest"...
+  local pair src dest label
+  for pair in "$@"; do
+    src=${pair%%|*}; dest=${pair#*|}
+    label="${dest/#$HOME/\~}"
+    if [ -L "$dest" ]; then
+      if [ ! -e "$dest" ]; then
+        booch_doctor_row "$label" warn "リンク切れ（→ $(readlink "$dest")）"
+      elif [ "$(readlink -f "$dest")" = "$(readlink -f "$src")" ]; then
+        booch_doctor_row "$label" ok "→ ${src/#$HOME/\~}"
+      else
+        booch_doctor_row "$label" warn "別実体を指す（→ $(readlink -f "$dest")）"
+      fi
+    elif [ -e "$dest" ]; then
+      booch_doctor_row "$label" warn "symlink でなく実体が存在"
+    else
+      booch_doctor_row "$label" warn "未配置"
+    fi
+  done
+}
+
+# apt-mark showmanual のうち、引数で渡した「追跡済み」集合に含まれない手動導入パッケージを
+# 監査する。差分の大半は base/依存ライブラリで自動判定の信号にならないため opt-in の棚卸し
+# 機構。BOOCH_DOCTOR_APT_AUDIT=1 のときだけ apt-mark を走らせ件数＋一覧を出し、未設定時は
+# 案内行のみ（apt-mark を実行しない）。利用側は追跡対象パッケージ集合を引数で渡す。
+booch_doctor_apt_untracked() { # tracked-package...
+  local label="apt 手動導入 (未追跡)"
+  if [ "${BOOCH_DOCTOR_APT_AUDIT:-}" != 1 ]; then
+    booch_doctor_row "$label" skip "BOOCH_DOCTOR_APT_AUDIT=1 で監査"
+    return 0
+  fi
+  command -v apt-mark >/dev/null 2>&1 || { booch_doctor_row "$label" skip "apt-mark not available"; return 0; }
+  local untracked n
+  untracked=$(comm -23 \
+    <(apt-mark showmanual 2>/dev/null | sort -u) \
+    <(printf '%s\n' "$@" | sort -u))
+  n=$(printf '%s' "$untracked" | grep -c .)
+  if [ "$n" -eq 0 ]; then
+    booch_doctor_row "$label" ok "0"
+  else
+    booch_doctor_row "$label" skip "$n 個（多くは base/依存）"
+    printf '%s\n' "$untracked" | sed 's/^/      /'
   fi
 }

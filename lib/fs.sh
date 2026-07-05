@@ -42,23 +42,42 @@ booch_symlink() { # src dest
   fi
 }
 
-# TOML のキーを冪等に設定する。既にあれば値を置換、無ければ追記する。他キーには触れない
-# （ユーザーが足した他キーを壊さないため、丸ごと上書きしない用途に使う）。
+# TOML の「トップレベル」キーを冪等に設定する。既にあれば値を置換、無ければ追記する。他キーには
+# 触れない（ユーザーが足した他キーを壊さないため、丸ごと上書きしない用途に使う）。
 # 親ディレクトリが無ければ作る（初回配置で touch が失敗しないように）。key/value は
 # リテラル扱いで、regex/置換のメタ文字（. [ & | \ 等）を解釈させない（sed だと誤置換・
 # 構文エラーになりうるため awk で 1 パス置換/追記する）。
+#
+# セクション対応（重要）: 対象はあくまでトップレベルのキー。最初の `[section]` ヘッダより前
+# （トップレベル領域）だけを置換・挿入対象にする。トップレベルに未存在で、かつファイルが
+# セクションを含む場合、EOF ではなく最初のセクションヘッダの直前に挿入する（EOF 追記だと
+# 末尾のセクション内に入り込み、キーが `[section].key` として解釈されて無効化するため）。
+# セクション内の同名キーには触れない。
 booch_set_toml_key() { # file key value
   local file=$1 key=$2 value=$3 tmp rc
   mkdir -p "$(dirname "$file")" || return 1
   touch "$file" || return 1
   tmp=$(mktemp) || return 1
   awk -v k="$key" -v v="$value" '
-    BEGIN { kv = k " = " v }
+    BEGIN { kv = k " = " v; done = 0; in_top = 1 }
     {
-      probe = $0
-      sub(/^[ \t]+/, "", probe)
-      sub(/[ \t]*=.*$/, "", probe)
-      if (probe == k && !done) { print kv; done = 1 } else { print $0 }
+      hdr = $0
+      sub(/^[ \t]+/, "", hdr)
+      # トップレベル領域の終わり（最初のセクションヘッダ）。未挿入ならここで挿入する。
+      if (in_top && substr(hdr, 1, 1) == "[") {
+        if (!done) { print kv; done = 1 }
+        in_top = 0
+        print $0
+        next
+      }
+      # トップレベル領域内で同名キーがあれば置換する（セクション内は対象外）。
+      if (in_top && !done) {
+        probe = $0
+        sub(/^[ \t]+/, "", probe)
+        sub(/[ \t]*=.*$/, "", probe)
+        if (probe == k) { print kv; done = 1; next }
+      }
+      print $0
     }
     END { if (!done) print kv }
   ' "$file" > "$tmp" && cat "$tmp" > "$file"

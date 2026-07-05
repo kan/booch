@@ -262,4 +262,69 @@ test_doctor_apt_pkg_outdated_when_candidate_newer() {
   assert_eq "1" "$BOOCH_DOCTOR_OUTDATED"
 }
 
+# command が空なら dpkg の install 状態で存在判定する（language-pack-ja 等コマンド無し）。
+test_doctor_apt_pkg_package_only_ok_when_installed() {
+  booch_doctor_init
+  dpkg-query() { case "$*" in *Status-Status*) echo "installed" ;; *) echo "1.0" ;; esac; }
+  apt-cache() { echo "  Candidate: 1.0"; }
+  dpkg() { return 1; }
+  local out; out=$(booch_doctor_apt_pkg "language-pack-ja" "" "language-pack-ja")
+  assert_contains "$out" "[OK]"
+  assert_contains "$out" "1.0"
+}
+test_doctor_apt_pkg_package_only_missing_when_not_installed() {
+  booch_doctor_init
+  dpkg-query() { echo ""; }   # 未 install → status 空
+  local out; out=$(booch_doctor_apt_pkg "language-pack-ja" "" "language-pack-ja")
+  assert_contains "$out" "[MISSING]"
+}
+
+# --- booch_doctor_symlinks（temp の実 symlink で検証） ---
+test_doctor_symlinks_ok_when_correct() {
+  local d; d=$(mktemp -d); : > "$d/src"; ln -s "$d/src" "$d/link"
+  assert_contains "$(booch_doctor_symlinks "$d/src|$d/link")" "[OK]"
+  rm -rf "$d"
+}
+test_doctor_symlinks_warn_when_real_file() {
+  local d; d=$(mktemp -d); : > "$d/src"; : > "$d/link"
+  assert_contains "$(booch_doctor_symlinks "$d/src|$d/link")" "実体が存在"
+  rm -rf "$d"
+}
+test_doctor_symlinks_warn_when_dangling() {
+  local d; d=$(mktemp -d); ln -s "$d/nope" "$d/link"
+  assert_contains "$(booch_doctor_symlinks "$d/src|$d/link")" "リンク切れ"
+  rm -rf "$d"
+}
+test_doctor_symlinks_warn_when_wrong_target() {
+  local d; d=$(mktemp -d); : > "$d/src"; : > "$d/other"; ln -s "$d/other" "$d/link"
+  assert_contains "$(booch_doctor_symlinks "$d/src|$d/link")" "別実体"
+  rm -rf "$d"
+}
+test_doctor_symlinks_warn_when_missing() {
+  local d; d=$(mktemp -d); : > "$d/src"
+  assert_contains "$(booch_doctor_symlinks "$d/src|$d/link")" "未配置"
+  rm -rf "$d"
+}
+
+# --- booch_doctor_apt_untracked（env gate + apt-mark を seam） ---
+test_doctor_apt_untracked_skips_without_env() {
+  booch_doctor_init
+  local out; out=$(booch_doctor_apt_untracked foo bar)
+  assert_contains "$out" "[SKIP]"
+  assert_contains "$out" "BOOCH_DOCTOR_APT_AUDIT=1"
+}
+test_doctor_apt_untracked_lists_untracked_when_enabled() {
+  booch_doctor_init
+  apt-mark() { printf 'bar\nbaz\nfoo\n'; }
+  local out; out=$(BOOCH_DOCTOR_APT_AUDIT=1 booch_doctor_apt_untracked foo)
+  assert_contains "$out" "bar"
+  assert_contains "$out" "baz"
+  assert_not_contains "$out" "      foo"   # 追跡済み foo は一覧に出ない
+}
+test_doctor_apt_untracked_ok_when_all_tracked() {
+  booch_doctor_init
+  apt-mark() { printf 'bar\nfoo\n'; }
+  assert_contains "$(BOOCH_DOCTOR_APT_AUDIT=1 booch_doctor_apt_untracked foo bar)" "[OK]"
+}
+
 run_tests
