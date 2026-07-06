@@ -5,6 +5,16 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-06
+
+### Added
+
+- 提供ジョブ `jobs/starship.sh`（`job_starship`）を追加。Starship プロンプトを GitHub
+  Releases の musl 静的バイナリ（`starship-<arch>-unknown-linux-musl.tar.gz`）から
+  `/usr/local/bin/starship` へ導入 / 更新する。同リリースの per-asset `.sha256`（ハッシュ
+  64 桁のみ）で tar.gz を展開前に検証する（`lib/verify.sh`）。x86_64 / aarch64 対応。
+  codex / circleci と同じ「DL → 検証 → 展開 → sudo install」パターン。
+
 ## [1.1.1] - 2026-07-06
 
 ### Fixed
@@ -96,7 +106,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/kan/booch/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/kan/booch/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/kan/booch/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/kan/booch/compare/v1.0.1...v1.0.2
