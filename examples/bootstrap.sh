@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 現実的なブートストラップ例。booch の提供ジョブ（go / delta / codex / aws / circleci）を
+# 現実的なブートストラップ例。booch の提供ジョブ（go / delta / codex / aws / circleci / starship）を
 # 組み合わせ、sudo を事前キャッシュしてから並列導入する。実際にツールを導入する（network +
 # sudo を使う）ため、自分の環境で動かすときの雛形としてコピーして使う。CI では実行しない。
 #
@@ -25,6 +25,7 @@ source "$BOOCH_ROOT/jobs/delta.sh"
 source "$BOOCH_ROOT/jobs/codex.sh"
 source "$BOOCH_ROOT/jobs/aws.sh"
 source "$BOOCH_ROOT/jobs/circleci.sh"
+source "$BOOCH_ROOT/jobs/starship.sh"
 
 booch_runner_init
 
@@ -43,5 +44,6 @@ booch_job delta    "delta (git pager)" job_delta    120
 booch_job codex    "Codex CLI"         job_codex    120
 booch_job aws      "AWS CLI + SSM"     job_aws      180
 booch_job circleci "CircleCI CLI"      job_circleci 120
+booch_job starship "Starship"          job_starship 180
 
 booch_run
