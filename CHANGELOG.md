@@ -5,6 +5,17 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-06
+
+### Fixed
+
+- `booch_wsl_doctor_interop`（`lib/wsl.sh`）の WSL interop 行（`binfmt_misc registration` /
+  `persistence config`）を `booch_doctor_row` に委譲し、他の doctor 行と体裁を統一した。
+  従来は行を独自 `printf` で手描きしていたため、`[OK]` に緑色が付かず（生 `echo`）、さらに
+  ラベルと `[OK]` の間の 1 スペースが欠けて他行と 1 桁ずれていた。同じ行描画を 2 箇所で
+  持つとドリフトするため、描画は `booch_doctor_row` に一本化した（`lib/wsl.sh` の当該診断は
+  `lib/doctor.sh` に依存する）。
+
 ## [1.1.0] - 2026-07-05
 
 ### Added
@@ -85,7 +96,9 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/kan/booch/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/kan/booch/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/kan/booch/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/kan/booch/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kan/booch/releases/tag/v1.0.0
