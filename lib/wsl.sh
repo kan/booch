@@ -7,14 +7,14 @@
 #   booch_wsl_is_wsl && echo "on WSL"
 #   booch_wsl_doctor_interop || warn=1
 #
-# 依存: grep。色は lib/color.sh（未定義でも空で動く）。
+# 依存: grep。booch_wsl_doctor_interop は 1 行の描画を lib/doctor.sh の booch_doctor_row に
+# 委譲する（色・ラベル幅・[OK]/[WARN] の体裁を doctor 本体の他行と揃えるため。利用側は
+# doctor.sh を先に source すること）。判定 seam（is_wsl / registered / persisted）は grep のみ。
 #
 # テスト用の継ぎ目（seam）:
 #   booch_wsl_is_wsl                WSL 上か
 #   booch_wsl_interop_registered    binfmt_misc に WSLInterop が登録済みか
 #   booch_wsl_interop_persisted     binfmt.d に永続設定があるか
-
-: "${_BOOCH_COLOR_YELLOW:=}" "${_BOOCH_COLOR_RESET:=}"
 
 # WSL 上で動いているか（/proc/version の microsoft か WSL_DISTRO_NAME で判定）。
 booch_wsl_is_wsl() {
@@ -38,20 +38,16 @@ booch_wsl_doctor_interop() {
   booch_wsl_is_wsl || return 0
   local warn=0
   echo "--- WSL interop ---"
-  printf '  %-30s' "binfmt_misc registration"
   if booch_wsl_interop_registered; then
-    echo "[OK]  enabled"
+    booch_doctor_row "binfmt_misc registration" ok "enabled"
   else
-    printf '%s[WARN]%s WSLInterop disabled (.exe not runnable from WSL)\n' \
-      "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET"
+    booch_doctor_row "binfmt_misc registration" warn "WSLInterop disabled (.exe not runnable from WSL)"
     warn=1
   fi
-  printf '  %-30s' "persistence config"
   if booch_wsl_interop_persisted; then
-    echo "[OK]  /usr/lib/binfmt.d/WSLInterop.conf"
+    booch_doctor_row "persistence config" ok "/usr/lib/binfmt.d/WSLInterop.conf"
   else
-    printf '%s[WARN]%s not persisted (binfmt-support updates may drop WSLInterop)\n' \
-      "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET"
+    booch_doctor_row "persistence config" warn "not persisted (binfmt-support updates may drop WSLInterop)"
     echo "    sudo tee /usr/lib/binfmt.d/WSLInterop.conf <<'CONF'"
     echo "    :WSLInterop:M::MZ::/init:PF"
     echo "    CONF  -> sudo systemctl restart systemd-binfmt"

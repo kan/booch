@@ -9,6 +9,9 @@ export BOOCH_ROOT
 
 # shellcheck source=tests/lib.sh
 source "$TESTS_DIR/lib.sh"
+# booch_wsl_doctor_interop は行描画を booch_doctor_row へ委譲するため doctor.sh も要る。
+# shellcheck source=lib/doctor.sh
+source "$BOOCH_ROOT/lib/doctor.sh"
 # shellcheck source=lib/wsl.sh
 source "$BOOCH_ROOT/lib/wsl.sh"
 
@@ -47,6 +50,29 @@ test_doctor_interop_ok_when_all_good() {
   booch_wsl_interop_persisted() { return 0; }
   local rc; if booch_wsl_doctor_interop >/dev/null; then rc=0; else rc=$?; fi
   assert_status 0 "$rc"   # 警告なし → 0
+}
+
+# OK 行が GREEN で色付けされること（他 doctor 行と揃える。生 echo だと無色になる回帰を防ぐ）。
+test_doctor_interop_ok_is_green() {
+  booch_wsl_is_wsl() { return 0; }
+  booch_wsl_interop_registered() { return 0; }
+  booch_wsl_interop_persisted() { return 0; }
+  local _BOOCH_COLOR_GREEN='<G>' _BOOCH_COLOR_RESET='<R>'
+  local out; out=$(booch_wsl_doctor_interop)
+  assert_contains "$out" "<G>[OK]<R>  enabled"
+  assert_contains "$out" "<G>[OK]<R>  /usr/lib/binfmt.d/WSLInterop.conf"
+}
+
+# 行の体裁（ラベル幅 + [OK] の桁）が booch_doctor_row と完全一致すること。生 printf を
+# 手書きしていた頃は 1 桁ずれていた回帰を、描画委譲で防いだことのガード。
+test_doctor_interop_row_matches_doctor_row() {
+  booch_wsl_is_wsl() { return 0; }
+  booch_wsl_interop_registered() { return 0; }
+  booch_wsl_interop_persisted() { return 0; }
+  local out expected
+  out=$(booch_wsl_doctor_interop)
+  expected=$(booch_doctor_row "binfmt_misc registration" ok "enabled")
+  assert_contains "$out" "$expected"
 }
 
 test_doctor_interop_warns_when_not_registered() {
