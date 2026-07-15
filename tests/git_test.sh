@@ -179,4 +179,27 @@ test_self_update_fetch_failure_aborts() {
   rm -rf "$d"
 }
 
+# fetch タイムアウトは既定 10 秒。timeout の期間引数を捕捉して確認する。
+test_self_update_fetch_timeout_default() {
+  unset BOOCH_GIT_FETCH_TIMEOUT
+  _stub_git; _G_COUNTS="0 0"
+  local cap=""
+  timeout() { cap=$1; shift; "$@"; }
+  local d; d=$(_mk_repo)
+  booch_git_self_update "$d" true >/dev/null
+  assert_eq "10" "$cap"
+  rm -rf "$d"
+}
+
+# BOOCH_GIT_FETCH_TIMEOUT で fetch タイムアウトを延ばせる。
+test_self_update_fetch_timeout_env_override() {
+  _stub_git; _G_COUNTS="0 0"
+  local cap=""
+  timeout() { cap=$1; shift; "$@"; }
+  local d; d=$(_mk_repo)
+  BOOCH_GIT_FETCH_TIMEOUT=45 booch_git_self_update "$d" true >/dev/null
+  assert_eq "45" "$cap"
+  rm -rf "$d"
+}
+
 run_tests

@@ -11,6 +11,10 @@
 # 依存: git, awk, timeout。色は lib/color.sh（runner 等が source 済みの前提。未定義でも
 # 空文字で動く）。
 #
+# 環境変数:
+#   BOOCH_GIT_FETCH_TIMEOUT   self_update の git fetch タイムアウト（秒。既定 10）。SSH +
+#                             1Password 等で初回接続に承認が挟まる環境は延ばす。
+#
 # テスト用の継ぎ目（seam）:
 #   booch_git_self_update_confirm   pull する y/N（tty が無ければ no）
 #   booch_git_reexec <cmd...>       pull 後の再実行（exec）
@@ -89,7 +93,9 @@ booch_git_self_update() {
   [ -d "$dir/.git" ] || return 0
   echo "Checking for updates in $dir..."
   local fetch_err fetch_status
-  fetch_err=$(timeout 10 git -C "$dir" fetch --quiet 2>&1)
+  # fetch のタイムアウト（秒）。SSH + 1Password 等で初回接続にユーザー承認が挟まると既定 10 秒では
+  # 足りず誤って fetch 失敗（=中断）になるため、利用側が BOOCH_GIT_FETCH_TIMEOUT で延ばせる。
+  fetch_err=$(timeout "${BOOCH_GIT_FETCH_TIMEOUT:-10}" git -C "$dir" fetch --quiet 2>&1)
   fetch_status=$?
   if [ "$fetch_status" -ne 0 ]; then
     printf '%sError:%s failed to fetch; aborting.\n' "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" >&2

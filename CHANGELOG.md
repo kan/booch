@@ -5,6 +5,15 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-15
+
+### Added
+
+- `booch_git_self_update`（`lib/git.sh`）の git fetch タイムアウトを環境変数
+  `BOOCH_GIT_FETCH_TIMEOUT`（秒。既定 10）で調整できるようにした。SSH + 1Password などで
+  初回接続にユーザー承認が挟まる環境では 10 秒では足りず、誤って fetch 失敗（= 自己更新を
+  中断）と判定されることがあるため、利用側が延ばせるようにする。既定値は据え置き（後方互換）。
+
 ## [1.4.0] - 2026-07-15
 
 ### Added
@@ -157,7 +166,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/kan/booch/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/kan/booch/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/kan/booch/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/kan/booch/compare/v1.2.0...v1.2.1
