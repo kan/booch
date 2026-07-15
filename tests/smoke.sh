@@ -11,7 +11,7 @@
 
 # 各 job_* は booch_job 登録 → runner が bash -c 経由で間接実行する。shellcheck は
 # 直接の呼び出しが見えず「到達不能」と誤検知するため、ファイル単位で無効化する。
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 set -uo pipefail
 
 BOOCH_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"

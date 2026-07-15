@@ -3,7 +3,7 @@
 # 差し替え、install/marketplace/plugin の冪等ロジックを検証する（実 claude 不要）。
 
 # stub（booch_claude_run 等の再定義）は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"

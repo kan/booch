@@ -40,7 +40,7 @@ booch_scaffold() { # dir
 # 自分の開発環境をブートストラップするエントリスクリプト（booch init が生成した雛形）。
 # booch（汎用ランナー）を source し、自分用の custom job と booch 提供ジョブを登録して
 # 並列実行する。自分の構成に合わせて編集すること。
-# shellcheck disable=SC2317   # job_* は runner が bash -c 経由で間接実行する
+# shellcheck disable=SC2317,SC2329   # job_* は runner が bash -c 経由で間接実行する
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -87,7 +87,7 @@ BOOTSTRAP
 # custom job のサンプル。個人固有の処理（特定リポジトリの clone/pull・社内ツール導入・
 # 設定ファイルの配置など）はこのように利用側に置き、booch 本体には持ち込まない。
 # ジョブは非対話・別プロセスで動くため、依存できるのは exported 変数と関数定義だけ。
-# shellcheck disable=SC2317   # job_* は runner が bash -c 経由で間接実行する
+# shellcheck disable=SC2317,SC2329   # job_* は runner が bash -c 経由で間接実行する
 
 job_example() {
   booch_status "running example job..."

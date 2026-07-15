@@ -2,7 +2,7 @@
 # jobs/circleci.sh のユニットテスト。seam をスタブで差し替え、分岐・基底名・arch を検証する。
 
 # stub（uname/seam）は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -90,7 +90,7 @@ test_circleci_install_passes_correct_asset() {
 
 # checksums.txt の期待ハッシュと取得物が食い違えば、展開（tar）/ sudo へ進む前に失敗する。
 # download をスタブし、checksums には対象資産名 + 不正ハッシュを書いて不一致を作る。
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 test_circleci_install_aborts_on_checksum_mismatch() {
   booch_github_download_asset() { # repo tag asset dest
     case "$3" in

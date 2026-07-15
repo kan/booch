@@ -40,7 +40,7 @@ source "$BOOCH_ROOT/jobs/circleci.sh"
 # source 済みの install 関数からコマンド名・seam 名として間接的に呼ばれるだけなので、
 # 静的解析からは「未呼び出し」に見える（SC2329 を抑止。CI の 0.9.0 は出さないが差分
 # 解析は新版で出すため）。
-# shellcheck disable=SC2317,SC2032,SC2033,SC2329
+# shellcheck disable=SC2317,SC2329,SC2032,SC2033,SC2329
 _rt_stubs() {
   # -o で指定された先に空ファイルを置くだけ（実通信しない）。
   curl() { local o=""; while [ "$#" -gt 0 ]; do [ "$1" = -o ] && { o=$2; shift; }; shift; done; [ -n "$o" ] && : > "$o" 2>/dev/null; return 0; }

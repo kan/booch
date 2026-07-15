@@ -2,7 +2,7 @@
 # lib/docker.sh のユニットテスト。docker/sudo/id/systemctl をスタブして検証する。
 
 # stub は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT

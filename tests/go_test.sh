@@ -3,7 +3,7 @@
 # ネットワーク / sudo 無しで分岐を検証する。
 
 # stub（uname/seam）は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -121,7 +121,7 @@ test_go_tools_multiple_modules() {
 # 期待ハッシュと取得物が食い違えば、展開（tar）/ sudo の入替へ進む前に失敗する。
 # curl は -o 先（最終引数）へ偽 tarball を書き、sudo は no-op（RETURN trap の掃除も無害化）。
 # stub は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 test_go_install_aborts_on_checksum_mismatch() {
   uname() { echo x86_64; }
   curl() { local out; for out; do :; done; printf 'fake' > "$out"; }
@@ -153,7 +153,7 @@ test_go_arch_unknown_fails() {
 
 # --- runner 経由の結合テスト（declare -f でスタブが子へ運ばれることまで検証） ---
 # スタブは runner の bash -c 子経由でのみ呼ばれ shellcheck からは到達不能に見える。
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 test_go_via_runner_reports_current() {
   booch_runner_init
   booch_go_installed_version() { printf 'go1.99.0'; }
@@ -168,7 +168,7 @@ test_go_via_runner_reports_current() {
 
 # 導入が失敗するとジョブは booch_result 到達前に abort するが、runner が failed 行を
 # 補う（_booch_exec の自動 failed 記録を実ジョブで確認する）。
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 test_go_via_runner_install_failure_is_failed() {
   booch_runner_init
   booch_go_installed_version() { printf ''; }

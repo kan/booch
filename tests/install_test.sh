@@ -4,7 +4,7 @@
 # 実地スモーク（clean 環境での curl|bash）は別途。
 
 # スタブ（seam）は間接呼び出しで SC2317 に見えるため抑制する。
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"

@@ -261,7 +261,7 @@ test_apt_warn_autoremove_treats_nonnumeric_as_zero() {
 
 # --- booch_apt_sync（sudo/upgrade/warn を seam で制御） ---
 # stub は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 test_apt_sync_returns_1_when_update_fails() {
   sudo() { case "$2" in update) return 1 ;; *) return 0 ;; esac; }
   booch_apt_upgrade() { return 0; }

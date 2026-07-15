@@ -2,7 +2,7 @@
 # lib/doctor.sh のユニットテスト。描画は文字列として、集計・終了コードは状態として検証する。
 
 # stub（command/dpkg 等）は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT

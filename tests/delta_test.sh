@@ -97,7 +97,7 @@ test_delta_install_passes_correct_asset() {
 
 # 競合する動的版 git-delta が入っているときだけ purge してから musl .deb を入れる。
 # download/dpkg/sudo をスタブし、purge の発火条件を回帰ガードする（実 sudo 不要）。
-# shellcheck disable=SC2317  # スタブは install 内からのみ呼ばれる
+# shellcheck disable=SC2317,SC2329  # スタブは install 内からのみ呼ばれる
 test_delta_install_purges_conflicting_dynamic_pkg() {
   booch_github_download_asset() { : > "$4"; }     # DL 成功（空 .deb を作る）
   dpkg() { [ "$1" = "-s" ] && return 0; return 0; }   # git-delta は導入済み
@@ -107,7 +107,7 @@ test_delta_install_purges_conflicting_dynamic_pkg() {
   assert_contains "$cap" "dpkg -i"
 }
 # 動的版が入っていなければ purge せず、そのまま musl .deb を入れる。
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 test_delta_install_skips_purge_when_absent() {
   booch_github_download_asset() { : > "$4"; }
   dpkg() { [ "$1" = "-s" ] && return 1; return 0; }   # git-delta 未導入
@@ -118,7 +118,7 @@ test_delta_install_skips_purge_when_absent() {
 }
 
 # --- runner 経由（declare -f でスタブが子へ運ばれること＋失敗時の自動 failed 記録） ---
-# shellcheck disable=SC2317  # スタブは runner の bash -c 子経由でのみ呼ばれる
+# shellcheck disable=SC2317,SC2329  # スタブは runner の bash -c 子経由でのみ呼ばれる
 test_delta_via_runner_reports_installed() {
   booch_runner_init
   booch_delta_arch() { echo amd64; }
@@ -132,7 +132,7 @@ test_delta_via_runner_reports_installed() {
 }
 
 # install 失敗時、job は booch_result 到達前に abort し runner が failed を補う。
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 test_delta_via_runner_install_failure_is_failed() {
   booch_runner_init
   booch_delta_arch() { echo amd64; }

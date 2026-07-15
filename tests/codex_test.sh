@@ -2,7 +2,7 @@
 # jobs/codex.sh のユニットテスト。seam をスタブで差し替え、分岐・基底名・arch を検証する。
 
 # stub（uname/seam）は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -110,7 +110,7 @@ test_codex_install_passes_correct_asset() {
 }
 
 # --- runner 経由（declare -f 伝播＋失敗時の自動 failed 記録） ---
-# shellcheck disable=SC2317  # スタブは runner の bash -c 子経由でのみ呼ばれる
+# shellcheck disable=SC2317,SC2329  # スタブは runner の bash -c 子経由でのみ呼ばれる
 test_codex_via_runner_reports_installed() {
   booch_runner_init
   booch_codex_arch() { echo x86_64; }
@@ -124,7 +124,7 @@ test_codex_via_runner_reports_installed() {
   assert_contains "$out" "0.20.0"
 }
 
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 test_codex_via_runner_install_failure_is_failed() {
   booch_runner_init
   booch_codex_arch() { echo x86_64; }

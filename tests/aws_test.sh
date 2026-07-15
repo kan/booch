@@ -3,7 +3,7 @@
 # arch / deb-dir の純粋ロジックを検証する（実 install 不要）。
 
 # stub（uname/seam）は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -70,7 +70,7 @@ test_aws_ssm_installed_when_missing_before() {
 }
 # SSM は upstream に版確認手段が無いため「未導入時のみ導入」。導入済みなら再導入せず
 # current を出す（毎回再取得しない＝冪等性の回帰ガード）。
-# shellcheck disable=SC2317  # install スタブは job 経由でのみ呼ばれる
+# shellcheck disable=SC2317,SC2329  # install スタブは job 経由でのみ呼ばれる
 test_aws_ssm_current_and_no_reinstall_when_present() {
   booch_runner_init
   booch_aws_arch() { echo x86_64; }
@@ -126,7 +126,7 @@ test_aws_fails_when_cli_latest_empty() {
 
 # --- 資産 URL / arch の install への受け渡し（curl 直叩きを fetch 不要で確認） ---
 # CLI install は curl を直接使うため、curl を関数で差し替えて URL を捕捉する。
-# shellcheck disable=SC2317  # curl/unzip/sudo は install 内からのみ呼ばれる
+# shellcheck disable=SC2317,SC2329  # curl/unzip/sudo は install 内からのみ呼ばれる
 test_aws_cli_install_uses_arch_in_url() {
   local cap_url=""
   curl() { while [ $# -gt 0 ]; do case "$1" in -o) shift 2 ;; -*) shift ;; *) cap_url=$1; shift ;; esac; done; return 1; }
@@ -136,7 +136,7 @@ test_aws_cli_install_uses_arch_in_url() {
 }
 
 # SSM install の URL に arch 由来の deb ディレクトリ（aarch64 → ubuntu_arm64）が入る。
-# shellcheck disable=SC2317  # curl/dpkg/sudo は install 内からのみ呼ばれる
+# shellcheck disable=SC2317,SC2329  # curl/dpkg/sudo は install 内からのみ呼ばれる
 test_aws_ssm_install_uses_arch_dir_in_url() {
   local cap_url=""
   curl() { while [ $# -gt 0 ]; do case "$1" in -o) shift 2 ;; -*) shift ;; *) cap_url=$1; shift ;; esac; done; return 1; }

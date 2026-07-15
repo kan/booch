@@ -7,7 +7,7 @@ BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
 
 # stub（validate/refresh）は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 
 # shellcheck source=tests/lib.sh
 source "$TESTS_DIR/lib.sh"
@@ -40,7 +40,7 @@ test_sudo_stop_clears_pid() {
 
 # 再 prime は前回のキープアライブを止めてから始める（孤児の refresher を残さない）。
 # 2 回目の prime が内部で stop を呼ぶことを数えて回帰ガードする。
-# shellcheck disable=SC2317  # stub は間接呼び出し
+# shellcheck disable=SC2317,SC2329  # stub は間接呼び出し
 test_sudo_prime_stops_previous_keepalive() {
   booch_sudo_validate() { return 0; }
   booch_sudo_refresh() { return 1; }   # bg ループは即抜ける（残留プロセス回避）

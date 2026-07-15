@@ -3,7 +3,7 @@
 # 分岐を検証する。
 
 # stub（git / seam）は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2329
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -154,7 +154,7 @@ test_self_update_behind_pull_failure_no_reexec() {
 }
 
 # 上流追跡ブランチが無ければ「Up to date」と誤報せず skip する。
-# shellcheck disable=SC2317  # git スタブは間接呼び出し
+# shellcheck disable=SC2317,SC2329  # git スタブは間接呼び出し
 test_self_update_no_upstream_skips() {
   _stub_git; _G_FETCH_RC=0
   git() {   # @{u} 解決だけ失敗させる（上流未設定を再現）
