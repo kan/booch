@@ -22,9 +22,9 @@ dotfiles に残し、booch は汎用部分だけを担う。
 素の WSL2 / Ubuntu から、booch を使う dotfiles を入れて setup を起動するところまでを 1 コマンドで:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kan/booch/v1.0.2/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash
 # 配置先や取り込む repo を指定する場合（bash -s -- で後続をスクリプトへ）:
-curl -fsSL https://raw.githubusercontent.com/kan/booch/v1.0.2/install.sh | bash -s -- \
+curl -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash -s -- \
     --dir "$HOME/dotfiles" --repo <owner>/<dotfiles>
 ```
 
@@ -202,7 +202,7 @@ bin/booch init ~/dotfiles
 cd ~/dotfiles
 git init
 git submodule add https://github.com/kan/booch vendor/booch
-git -C vendor/booch checkout v1.0.2   # リリースタグに固定（更新時はタグを上げる）
+git -C vendor/booch checkout vX.Y.Z   # 最新のリリースタグに固定（更新時はタグを上げる。https://github.com/kan/booch/releases）
 git submodule update --init --recursive
 bash bootstrap.sh
 ```
