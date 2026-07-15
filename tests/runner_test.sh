@@ -71,6 +71,26 @@ test_timeout_consistency_under_pipefail() {
   assert_contains "$out" "ran"
 }
 
+# 回帰ガード: declare -f の総量が 1 引数上限（MAX_ARG_STRLEN = 32×ページ = 128KiB）を
+# 超えてもジョブが実行できる。旧実装は inner を `bash -c "$inner"` の単一引数で渡していた
+# ため、booch の lib/jobs が増えて declare -f が 128KiB に達すると execve が E2BIG
+# （timeout: Argument list too long）で全ジョブ失敗した。inner を一時ファイル経由で
+# 実行することで引数長上限を回避する。
+test_large_function_corpus_runs() {
+  # declare -f 出力が 128KiB を確実に超えるよう、巨大リテラルを抱えた関数を定義する
+  # （declare -f はコメントを落とすが、文字列リテラルは保持するため inner が膨らむ）。
+  local blob
+  blob=$(head -c 160000 /dev/zero | tr '\0' 'x')
+  eval "_j_huge() { local _pad='$blob'; : \"\${#_pad}\"; booch_result huge current ok; }"
+  booch_runner_init
+  booch_job h "hugejob" _j_huge 60
+  local out rc
+  if out=$(booch_run); then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_contains "$out" "hugejob"
+  assert_contains "$out" "latest     ok"
+}
+
 test_duplicate_job_name_rejected() {
   booch_runner_init
   booch_job x "X1" _j_current 60

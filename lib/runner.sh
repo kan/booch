@@ -155,12 +155,19 @@ booch_job_sync() { # label noun current latest install_cmd...
 
 # concurrent から実際に起動されるラッパー。
 #
-# 実行モデルはタイムアウト有無で一致させる: どちらも `bash -c "set -e; ...; fn"`
-# で動かす。timeout は外部コマンドで bash 関数を直接呼べないため declare -f で関数
-# 定義を子へ持ち込む必要があり、そのモデルを非 timeout 側にも揃えることで「同じ
-# ジョブが timeout 指定の有無で成否が変わる」分岐差（shell オプション・変数継承の
+# 実行モデルはタイムアウト有無で一致させる: どちらも declare -f で全関数定義を持ち込む
+# 一時スクリプトを bash に食わせて動かす。timeout は外部コマンドで bash 関数を直接
+# 呼べないため関数定義を子へ運ぶ必要があり、そのモデルを非 timeout 側にも揃えることで
+# 「同じジョブが timeout 指定の有無で成否が変わる」分岐差（shell オプション・変数継承の
 # 違い）を無くす。ジョブは exported 変数 + 関数定義のみに依存する前提になる。
 # fd 3（ステータス）と fd 1/2（ログ）は exec をまたいで継承される。
+#
+# 関数定義を `bash -c "$inner"` の引数で渡すと、Linux の 1 引数あたり上限
+# MAX_ARG_STRLEN（32 × ページサイズ = 128KiB。argv+envp 合計の ARG_MAX とは別の
+# ハード上限）を超えたときに execve が E2BIG（Argument list too long）で落ちる。
+# booch の lib/jobs と bash-concurrent の関数群が増えると inner はこの上限に達しうる
+# （実測で 128KiB 手前）。そこで inner は一時ファイルへ書き出して `bash <file>` で
+# 実行する（ファイル実行にはこの引数長上限が無い）。
 #
 # ジョブが非 0 で終わる / timeout に kill される（exit 124/137）と、ジョブ自身は
 # failed 行を書けない。ここで rc を捕捉し、失敗時は代わりに failed 行を記録して
@@ -168,14 +175,17 @@ booch_job_sync() { # label noun current latest install_cmd...
 _booch_exec() {
   local fn=$1 t=$2 name=$3 label=$4
   export BOOCH_JOB="$name"
-  local inner
+  local inner script
   inner="set -e; $(declare -f); $fn"
+  script=$(mktemp) || { booch_result "$label" failed; return 1; }
+  printf '%s\n' "$inner" > "$script"
   local rc=0
   if [ -n "$t" ] && [ "$t" != "0" ]; then
-    timeout --foreground --kill-after=10 "$t" bash -c "$inner" || rc=$?
+    timeout --foreground --kill-after=10 "$t" bash "$script" || rc=$?
   else
-    bash -c "$inner" || rc=$?
+    bash "$script" || rc=$?
   fi
+  rm -f "$script"
   if [ "$rc" -ne 0 ]; then
     booch_result "$label" failed
   fi

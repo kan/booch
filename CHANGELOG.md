@@ -5,6 +5,19 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-15
+
+### Fixed
+
+- `_booch_exec`（`lib/runner.sh`）がジョブを `bash -c "$inner"` で起動する際、`inner`
+  （`declare -f` の全関数定義）を単一引数で渡していたため、消費側の lib/jobs が増えて
+  `inner` が Linux の 1 引数上限 `MAX_ARG_STRLEN`（32 × ページサイズ = 128KiB。argv+envp
+  合計の `ARG_MAX` とは別のハード上限）に達すると、`timeout` が bash を execve する時点で
+  E2BIG（`Argument list too long`）となり、timeout 付きの全ジョブが失敗していた。`inner` を
+  一時ファイルへ書き出して `bash <file>` で実行するよう変更し、引数長上限を回避する
+  （ファイル実行にはこの上限が無い）。回帰ガードとして `declare -f` が 128KiB を超えても
+  ジョブが完走することを検証するテストを追加（`tests/runner_test.sh`）。
+
 ## [1.2.0] - 2026-07-06
 
 ### Added
@@ -106,7 +119,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/kan/booch/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/kan/booch/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/kan/booch/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/kan/booch/compare/v1.0.2...v1.1.0
