@@ -67,3 +67,14 @@ booch_cleanup_docker_prune_safe() { # [excluded_networks_regex] [with_builder]
   docker system df 2>/dev/null | sed 's/^/    /'
   echo "  hint: unused tagged images -> 'docker image prune -af'; unused volumes (DBs! careful) -> 'docker volume prune -f'"
 }
+
+# 指定した各 git repo で `git worktree prune` を回す。実体が消えた worktree の登録メタだけを
+# 掃除する（冪等・安全。実在する worktree は消さない）。非 git / 不在パスはスキップ。表示は
+# booch_cleanup_run でインデントする。何の repo を対象にするかは利用側が決める。
+booch_cleanup_worktree_prune() { # repo...
+  local repo
+  for repo in "$@"; do
+    [ -e "$repo/.git" ] || continue
+    booch_cleanup_run git -C "$repo" worktree prune -v
+  done
+}

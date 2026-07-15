@@ -7,8 +7,10 @@
 #   source "$BOOCH_ROOT/lib/fs.sh"
 #   booch_symlink "$repo/bash/bashrc" "$HOME/.bashrc"
 #   booch_set_toml_key "$HOME/.codex/config.toml" model '"gpt-5.4"'
+#   booch_fs_broken_symlinks "$HOME/.local/bin" "$HOME/.config"   # "dest<TAB>target" を列挙
+#   booch_fs_remove_broken_symlink "$HOME/.local/bin/foo"          # 壊れリンクだけ再検証して削除
 #
-# 依存: ln, readlink, mkdir, mv, awk, date, touch, mktemp（GNU coreutils）。
+# 依存: ln, readlink, mkdir, mv, awk, date, touch, mktemp, find（GNU coreutils）。
 
 # src を指す symlink を dest に作る（冪等）。
 #   dest が同じ src を指す symlink     → 何もしない
@@ -84,4 +86,28 @@ booch_set_toml_key() { # file key value
   rc=$?
   rm -f "$tmp"
   return "$rc"
+}
+
+# root（複数、直下のみ maxdepth 1）から壊れた symlink を "dest\ttarget" で 1 行ずつ返す。
+# 生きているリンク・非リンク・読めないリンクは対象外（列挙のみ。実体は消さない）。どの target を
+# 掃除対象とするか（自分が配置したものだけ、等）の絞り込みは利用側が行う。$HOME 直下など user 自作
+# リンクが混じる場所を巻き込まないよう、走査は maxdepth 1（root 直下）に限る。
+booch_fs_broken_symlinks() { # root...
+  local root link tgt
+  for root in "$@"; do
+    [ -d "$root" ] || continue
+    while IFS= read -r link; do
+      [ -e "$link" ] && continue                  # 生きているリンクは対象外
+      tgt=$(readlink "$link" 2>/dev/null) || continue
+      printf '%s\t%s\n' "$link" "$tgt"
+    done < <(find "$root" -maxdepth 1 -type l 2>/dev/null)
+  done
+}
+
+# symlink かつ壊れている（指す先が存在しない）ことを再検証してから削除する。生きたリンク・実体は
+# 消さない（apply 直前の TOCTOU 対策として再検証する）。成功で 0。
+booch_fs_remove_broken_symlink() { # dest
+  [ -L "$1" ] || return 1
+  [ -e "$1" ] && return 1
+  rm -f "$1"
 }

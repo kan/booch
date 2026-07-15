@@ -5,6 +5,33 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-15
+
+### Added
+
+- `lib/cleanup.sh`: `booch_cleanup_worktree_prune <repo>...`。指定した各 git repo で
+  `git worktree prune` を回し、実体が消えた worktree の登録メタだけを掃除する（冪等・安全）。
+- `lib/claude.sh`: 列挙・削除・MCP 登録のプリミティブを追加。`booch_claude_plugin_list` /
+  `booch_claude_plugin_uninstall` / `booch_claude_marketplace_list` /
+  `booch_claude_marketplace_remove` / `booch_claude_mcp_ensure`（remove→add の冪等登録）/
+  `booch_claude_mcp_list` / `booch_claude_mcp_remove` / `booch_claude_autoremove_apply`
+  （plan の Claude 系 kind を削除。非対象 kind は 2 を返し利用側へ委ねる）。CLI 出力の
+  "❯" マーカー解析を 1 箇所（`_booch_claude_marked_names`）に集約。
+- `lib/autoremove.sh`（新規）: `booch_autoremove_diff <kind> <desc> <desired...>`。stdin の
+  実体一覧から desired 集合に無いものだけを "kind<TAB>id<TAB>desc" の plan 行にする汎用差分
+  ドライバ（booch-win の lib/autoremove.ps1 と対称）。
+- `lib/fs.sh`: `booch_fs_broken_symlinks <root...>`（root 直下 maxdepth 1 の壊れ symlink を
+  "dest<TAB>target" で列挙）/ `booch_fs_remove_broken_symlink <dest>`（symlink かつ壊れている
+  ことを再検証してから削除）。
+- `lib/codex-config.sh`（新規）: `booch_codex_config_top_level_keys <source>` /
+  `booch_codex_config_sync <source> [dest]`。TOML のトップレベルキーで `~/.codex/config.toml`
+  をキー単位に冪等更新する（他キー・セクションを温存。`booch_set_toml_key` に委譲。booch-win の
+  `Update-CodexConfig` と対称）。install ジョブ `jobs/codex.sh` とは別モジュール（`booch help
+  codex` はジョブ、`booch help codex-config` は設定ヘルパー）。
+
+いずれも消費側 dotfiles が直書きしていた汎用機構を booch へ寄せたもの（個人選択・環境固有値は
+消費側に残す）。
+
 ## [1.2.1] - 2026-07-15
 
 ### Fixed
@@ -119,7 +146,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/kan/booch/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/kan/booch/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/kan/booch/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/kan/booch/compare/v1.1.0...v1.1.1

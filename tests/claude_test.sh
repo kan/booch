@@ -2,6 +2,9 @@
 # lib/claude.sh のユニットテスト。claude 実行（booch_claude_run）を canned 出力/捕捉に
 # 差し替え、install/marketplace/plugin の冪等ロジックを検証する（実 claude 不要）。
 
+# stub（booch_claude_run 等の再定義）は間接呼び出しで shellcheck から到達不能に見える
+# shellcheck disable=SC2317
+
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -226,6 +229,72 @@ test_claude_plugin_ensure_install_failure_returns_error_without_output() {
   if out=$(booch_claude_plugin_ensure acme-tools@acme 2>/dev/null); then rc=0; else rc=$?; fi
   assert_status 1 "$rc"
   assert_eq "" "$out" "失敗時は outcome を出さない"
+}
+
+# --- 列挙・削除・MCP プリミティブ（autoremove / 再登録で使う）---
+test_claude_plugin_list_returns_names() {
+  booch_claude_run() { case "$*" in "plugin list") printf '  ❯ acme-tools@acme\n    Version: 1.0.0\n  ❯ codex@openai-codex\n    Version: 2.0.0\n' ;; esac; }
+  assert_eq 'acme-tools@acme
+codex@openai-codex' "$(booch_claude_plugin_list)"
+}
+test_claude_marketplace_list_returns_names() {
+  booch_claude_run() { case "$*" in "plugin marketplace list") printf '  ❯ acme\n  ❯ openai-codex\n' ;; esac; }
+  assert_eq 'acme
+openai-codex' "$(booch_claude_marketplace_list)"
+}
+test_claude_plugin_uninstall_invokes_command() {
+  local cap=""
+  booch_claude_run() { cap="$*"; }
+  booch_claude_plugin_uninstall acme-tools@acme
+  assert_eq "plugin uninstall acme-tools@acme" "$cap"
+}
+test_claude_marketplace_remove_invokes_command() {
+  local cap=""
+  booch_claude_run() { cap="$*"; }
+  booch_claude_marketplace_remove acme
+  assert_eq "plugin marketplace remove acme" "$cap"
+}
+test_claude_mcp_remove_invokes_user_scope() {
+  local cap=""
+  booch_claude_run() { cap="$*"; }
+  booch_claude_mcp_remove notion
+  assert_eq "mcp remove -s user notion" "$cap"
+}
+# ensure は remove → add の順で呼ぶ（定義変更に追従）。remove の失敗は握って add に到達する。
+test_claude_mcp_ensure_removes_then_adds() {
+  local calls=""
+  booch_claude_run() { calls="$calls|$*"; case "$1 $2" in "mcp remove") return 1 ;; esac; }  # remove は未登録想定で失敗
+  local rc; if booch_claude_mcp_ensure notion -e 'K=v' -- npx foo; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_eq "|mcp remove -s user notion|mcp add -s user notion -e K=v -- npx foo" "$calls"
+}
+# mcp_list は ~/.claude.json の mcpServers キーを返す（jq がある時のみ実質検証）。
+test_claude_mcp_list_reads_json() {
+  if ! command -v jq >/dev/null 2>&1; then return 0; fi
+  local f; f=$(mktemp)
+  printf '{"mcpServers":{"notion":{},"playwright":{}}}' > "$f"
+  assert_eq 'notion
+playwright' "$(booch_claude_mcp_list "$f")"
+  rm -f "$f"
+}
+test_claude_mcp_list_missing_file_empty() {
+  assert_eq "" "$(booch_claude_mcp_list /nonexistent/claude.json)"
+}
+# autoremove_apply は kind を claude プリミティブへ振り分け、非対象 kind は 2 を返す。
+test_claude_autoremove_apply_dispatches() {
+  local cap=""
+  booch_claude_run() { cap="$*"; }
+  booch_claude_autoremove_apply plugin acme-tools@acme
+  assert_eq "plugin uninstall acme-tools@acme" "$cap"
+  booch_claude_autoremove_apply marketplace acme
+  assert_eq "plugin marketplace remove acme" "$cap"
+  booch_claude_autoremove_apply mcpserver notion
+  assert_eq "mcp remove -s user notion" "$cap"
+}
+test_claude_autoremove_apply_unknown_kind_returns_2() {
+  booch_claude_run() { :; }
+  local rc; if booch_claude_autoremove_apply mktclone /some/path; then rc=0; else rc=$?; fi
+  assert_status 2 "$rc"
 }
 
 run_tests

@@ -66,4 +66,30 @@ test_docker_prune_with_builder() {
   assert_contains "$out" "docker builder prune"
 }
 
+# --- booch_cleanup_worktree_prune ---
+# 実体が消えた worktree の登録メタだけを prune する（実在 worktree は消さない）。
+test_worktree_prune_removes_stale_registration() {
+  local d; d=$(mktemp -d)
+  git init -q "$d/repo"
+  ( cd "$d/repo" \
+      && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init \
+      && git worktree add -q "$d/wt" >/dev/null 2>&1 )
+  rm -rf "$d/wt"   # 実体を消す（登録メタは残り prunable になる）
+  local before after
+  before=$(git -C "$d/repo" worktree list | wc -l)
+  booch_cleanup_worktree_prune "$d/repo" >/dev/null 2>&1
+  after=$(git -C "$d/repo" worktree list | wc -l)
+  assert_eq "2" "$before"   # prune 前: 本体 + 消えた wt の登録
+  assert_eq "1" "$after"    # prune 後: 本体のみ
+  rm -rf "$d"
+}
+
+# 非 git / 不在パスはスキップして 0（エラーにしない）。
+test_worktree_prune_skips_non_git() {
+  local d; d=$(mktemp -d)
+  local rc; if booch_cleanup_worktree_prune "$d/not-a-repo" /nonexistent >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  rm -rf "$d"
+}
+
 run_tests

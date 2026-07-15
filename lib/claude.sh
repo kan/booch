@@ -116,3 +116,69 @@ booch_claude_plugin_ensure() { # plugin@source -> "<status>\t<old>\t<new>"
   fi
   printf '%s\t%s\t%s\n' "$status" "$old" "$new"
 }
+
+# --- 列挙・削除・MCP 登録のプリミティブ（autoremove / MCP 再登録で使う）---------------
+# plugin list / marketplace list は先頭に "❯" マーカー付きで name が 2 列目に出る。その name
+# だけを 1 行ずつ返す共通パーサ（"❯" は UTF-8 の e2 9d af）。CLI 出力書式に依存する薄い層で、
+# 利用側の autoremove / 診断がこの 1 箇所を共有する（各所で同じ awk を書かない）。
+_booch_claude_marked_names() { # claude-subcommand...
+  booch_claude_run "$@" 2>/dev/null | awk '$1=="\xe2\x9d\xaf"{print $2}'
+}
+
+# 導入済みプラグイン名（plugin@source）を 1 行ずつ返す。
+booch_claude_plugin_list() {
+  _booch_claude_marked_names plugin list
+}
+
+# プラグインをアンインストールする（成功で 0）。
+booch_claude_plugin_uninstall() { # plugin@source
+  booch_claude_run plugin uninstall "$1" >/dev/null 2>&1
+}
+
+# 登録済み marketplace 名を 1 行ずつ返す。
+booch_claude_marketplace_list() {
+  _booch_claude_marked_names plugin marketplace list
+}
+
+# marketplace を登録解除する（clone ディレクトリも消える。成功で 0）。
+booch_claude_marketplace_remove() { # name
+  booch_claude_run plugin marketplace remove "$1" >/dev/null 2>&1
+}
+
+# user スコープ MCP を冪等登録する（remove → add で定義変更に追従）。対話用シェル関数ラッパー
+# （1Password 未到達で本体を起動しない等）を迂回するため booch_claude_run（固定バイナリ直叩き）
+# で行う。プロビジョニングを実行時トークンに依存させないための設計。
+#   引数: <name> <claude mcp add に渡す残りの引数...>（-e KEY=val / -- cmd args 等）。成功で 0。
+booch_claude_mcp_ensure() { # name mcp-add-args...
+  local name=$1; shift
+  # remove は未登録サーバーに exit 1 を返す。set -e 下の呼び出しでも初回登録（未存在→add）が
+  # 中断しないよう握る。
+  booch_claude_run mcp remove -s user "$name" >/dev/null 2>&1 || true
+  booch_claude_run mcp add -s user "$name" "$@" >/dev/null 2>&1
+}
+
+# user スコープ MCP 名を 1 行ずつ返す（既定 ~/.claude.json の mcpServers キー）。jq 必須で、
+# jq / ファイルが無ければ無出力（呼び出し側は空を「対象なし」として扱える）。
+booch_claude_mcp_list() { # [claude_json]
+  local cj=${1:-$HOME/.claude.json}
+  [ -f "$cj" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  jq -r '.mcpServers // {} | keys[]' "$cj" 2>/dev/null
+}
+
+# user スコープ MCP を登録解除する（成功で 0）。
+booch_claude_mcp_remove() { # name
+  booch_claude_run mcp remove -s user "$1" >/dev/null 2>&1
+}
+
+# autoremove plan の Claude 系 kind（plugin / marketplace / mcpserver）を削除する。パス検証が
+# 要る利用側固有の kind（marketplace clone 残渣 / 壊れ symlink 等）は扱わず、2 を返して呼び出し側へ
+# 委ねる（安全な削除の責任分界。0=削除実行 / 1=削除失敗 / 2=非対象 kind）。
+booch_claude_autoremove_apply() { # kind id
+  case "$1" in
+    plugin)      booch_claude_plugin_uninstall "$2" ;;
+    marketplace) booch_claude_marketplace_remove "$2" ;;
+    mcpserver)   booch_claude_mcp_remove "$2" ;;
+    *) return 2 ;;
+  esac
+}

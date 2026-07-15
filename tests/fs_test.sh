@@ -167,4 +167,61 @@ model = "sectioned"' "$(cat "$f")"
   rm -f "$f"
 }
 
+# --- 壊れ symlink の列挙・削除 ---
+# root 直下の壊れリンクだけを "dest\ttarget" で列挙する（生きたリンク・非リンクは除外）。
+test_broken_symlinks_lists_only_broken() {
+  local d; d=$(mktemp -d)
+  printf 'x\n' > "$d/real"
+  ln -s "$d/real" "$d/alive"          # 生きたリンク → 対象外
+  ln -s "$d/gone" "$d/broken"         # 壊れリンク → 対象
+  local out; out=$(booch_fs_broken_symlinks "$d")
+  assert_eq "$(printf '%s\t%s' "$d/broken" "$d/gone")" "$out"
+  rm -rf "$d"
+}
+
+# maxdepth 1（root 直下のみ）。サブディレクトリの壊れリンクは拾わない。
+test_broken_symlinks_maxdepth_one() {
+  local d; d=$(mktemp -d)
+  mkdir -p "$d/sub"
+  ln -s "$d/gone" "$d/sub/deep"       # 深い階層 → 対象外
+  local out; out=$(booch_fs_broken_symlinks "$d")
+  assert_eq "" "$out"
+  rm -rf "$d"
+}
+
+# 複数 root を順に走査し、存在しない root はスキップする。
+test_broken_symlinks_multiple_roots_skips_missing() {
+  local d; d=$(mktemp -d)
+  ln -s "$d/gone" "$d/broken"
+  local out; out=$(booch_fs_broken_symlinks /nonexistent/root "$d")
+  assert_eq "$(printf '%s\t%s' "$d/broken" "$d/gone")" "$out"
+  rm -rf "$d"
+}
+
+# remove は「symlink かつ壊れている」ときだけ消す。生きたリンク・実体は消さない。
+test_remove_broken_symlink_removes_only_broken() {
+  local d; d=$(mktemp -d)
+  ln -s "$d/gone" "$d/broken"
+  local rc; if booch_fs_remove_broken_symlink "$d/broken"; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  [ -L "$d/broken" ] && fail "壊れリンクが消えていない"
+  rm -rf "$d"
+}
+test_remove_broken_symlink_keeps_alive_link() {
+  local d; d=$(mktemp -d)
+  printf 'x\n' > "$d/real"; ln -s "$d/real" "$d/alive"
+  local rc; if booch_fs_remove_broken_symlink "$d/alive"; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  [ -L "$d/alive" ] || fail "生きたリンクを消してしまった"
+  rm -rf "$d"
+}
+test_remove_broken_symlink_keeps_regular_file() {
+  local d; d=$(mktemp -d)
+  printf 'x\n' > "$d/file"
+  local rc; if booch_fs_remove_broken_symlink "$d/file"; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  [ -f "$d/file" ] || fail "実体ファイルを消してしまった"
+  rm -rf "$d"
+}
+
 run_tests
