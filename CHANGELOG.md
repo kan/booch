@@ -5,6 +5,17 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-15
+
+### Added
+
+- 提供ジョブ `jobs/shellcheck.sh`（`job_shellcheck`）を追加。ShellCheck を GitHub Releases の
+  静的バイナリ（`shellcheck-<tag>.linux.<arch>.tar.xz`）から `/usr/local/bin/shellcheck` へ導入 /
+  更新する。x86_64 / aarch64 対応。Ubuntu の apt 版は各リリースの版に張り付き（例: 24.04 は
+  0.9.0 固定で SC2329 等の新しい検査が入らない）、CI が使う新しめの shellcheck とローカルが
+  ずれるため、GitHub Releases から直接最新へ追従する。upstream がチェックサムを公開していない
+  ため取得物は未検証（delta / codex 単体バイナリと同じ扱い）。
+
 ## [1.3.0] - 2026-07-15
 
 ### Added
@@ -146,7 +157,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/kan/booch/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/kan/booch/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/kan/booch/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/kan/booch/compare/v1.1.1...v1.2.0
