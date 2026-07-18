@@ -115,12 +115,14 @@ test_install_main_runs_steps_in_order() {
 }
 test_install_main_requires_repo() {
   # --repo も BOOCH_INSTALL_REPO も無ければ、副作用の前に非 0 で中断する。
+  # test_* はサブシェル隔離実行なので、ここでの unset は他テストへ波及しない。
+  unset BOOCH_INSTALL_REPO
   local log=""
   booch_install_prereqs() { log="$log prereqs"; }
   booch_install_auth()    { log="$log auth"; }
   booch_install_clone()   { log="$log clone"; }
   local rc
-  if BOOCH_INSTALL_REPO= booch_install_main --dir /tmp/df >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  if booch_install_main --dir /tmp/df >/dev/null 2>&1; then rc=0; else rc=$?; fi
   assert_status 1 "$rc"
   assert_eq "" "$log" "repo 未指定なら副作用を起こさない"
 }
