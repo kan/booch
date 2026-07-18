@@ -8,7 +8,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/kan/booch/v1.0.0/install.sh | bash
 #   # 引数を渡す場合は bash -s -- で後続をスクリプトへ:
 #   curl -fsSL https://raw.githubusercontent.com/kan/booch/v1.0.0/install.sh | bash -s -- \
-#       --dir "$HOME/dotfiles" --repo kan/dotfiles
+#       --dir "$HOME/dotfiles" --repo youraccount/dotfiles
 #
 # 何をするか（各ステップ冪等。無ければ入れる / 既存なら更新）:
 #   1. 前提ツール（git / curl / gh）を確保する（不足分のみ。apt は sudo を使う）
@@ -136,14 +136,14 @@ _bi_usage() {
   cat <<'USAGE'
 booch bootstrap — 素の WSL2/Ubuntu から booch を使う dotfiles を入れる
   --dir <path>        dotfiles の配置先（既定: ~/dotfiles）
-  --repo <owner/name> 取り込む dotfiles repo（既定: kan/dotfiles）
+  --repo <owner/name> 取り込む dotfiles repo（必須。環境変数 BOOCH_INSTALL_REPO でも指定可）
   --booch-ref <tag>   sibling clone 時の booch タグ（既定: v1.0.0）
   --run <relpath>     setup エントリを明示（既定: bootstrap.sh / setup/dotfiles を自動検出）
 USAGE
 }
 
 booch_install_main() {
-  local dir="$HOME/dotfiles" repo="kan/dotfiles" ref="$BOOCH_INSTALL_BOOCH_REF_DEFAULT" run=""
+  local dir="$HOME/dotfiles" repo="${BOOCH_INSTALL_REPO:-}" ref="$BOOCH_INSTALL_BOOCH_REF_DEFAULT" run=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --dir)       dir=${2:-}; shift 2 ;;
@@ -154,6 +154,13 @@ booch_install_main() {
       *) _bi_err "不明な引数: $1"; _bi_usage >&2; return 1 ;;
     esac
   done
+  # 汎用ツールなので取り込む dotfiles repo を既定に埋め込まない。--repo か
+  # 環境変数 BOOCH_INSTALL_REPO で受け、未指定なら副作用の前に中断する。
+  if [ -z "$repo" ]; then
+    _bi_err "取り込む dotfiles repo が未指定です。--repo <owner>/<name> か環境変数 BOOCH_INSTALL_REPO を指定してください。"
+    _bi_usage >&2
+    return 1
+  fi
   booch_install_prereqs || return 1
   booch_install_auth || return 1
   booch_install_clone "$repo" "$dir" || return 1

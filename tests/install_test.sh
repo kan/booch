@@ -22,15 +22,15 @@ test_install_clone_uses_gh_when_absent() {
   local d; d=$(mktemp -d)   # .git 無し
   local cap=""
   booch_install_gh() { cap="$*"; }
-  booch_install_clone kan/dotfiles "$d/df" >/dev/null
-  assert_eq "repo clone kan/dotfiles $d/df" "$cap"
+  booch_install_clone youraccount/dotfiles "$d/df" >/dev/null
+  assert_eq "repo clone youraccount/dotfiles $d/df" "$cap"
   rm -rf "$d"
 }
 test_install_clone_pulls_when_present() {
   local d; d=$(mktemp -d); mkdir -p "$d/df/.git"
   local cap=""
   booch_install_git() { cap="$*"; }
-  booch_install_clone kan/dotfiles "$d/df" >/dev/null
+  booch_install_clone youraccount/dotfiles "$d/df" >/dev/null
   assert_eq "-C $d/df pull --ff-only" "$cap"
   rm -rf "$d"
 }
@@ -112,6 +112,17 @@ test_install_main_runs_steps_in_order() {
   booch_install_run()          { log="$log run:$1:$2"; }
   booch_install_main --dir /tmp/df --repo me/dots --booch-ref v9 --run go.sh >/dev/null
   assert_eq " prereqs auth clone:me/dots:/tmp/df booch:/tmp/df:v9 run:/tmp/df:go.sh" "$log"
+}
+test_install_main_requires_repo() {
+  # --repo も BOOCH_INSTALL_REPO も無ければ、副作用の前に非 0 で中断する。
+  local log=""
+  booch_install_prereqs() { log="$log prereqs"; }
+  booch_install_auth()    { log="$log auth"; }
+  booch_install_clone()   { log="$log clone"; }
+  local rc
+  if BOOCH_INSTALL_REPO= booch_install_main --dir /tmp/df >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "" "$log" "repo 未指定なら副作用を起こさない"
 }
 test_install_main_rejects_unknown_arg() {
   local rc; if booch_install_main --bogus >/dev/null 2>&1; then rc=0; else rc=$?; fi
