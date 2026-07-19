@@ -5,6 +5,16 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-19
+
+### Added
+
+- `booch_wsl_ensure_systemd`（`lib/wsl.sh`）: WSL の `/etc/wsl.conf` に `[boot] systemd=true` を
+  設定する。dockerd や `systemctl` を前提にするツール（docker / roji 等）は systemd 無しの WSL では
+  導入・起動に失敗するため、その前段で呼ぶ。既存の `[boot]` があればその中へ差し込み、無ければ
+  追記する（他セクションを壊さない）。冪等で、書いたときだけ WSL 再起動の案内を stderr へ出す。
+  設定ファイルのパスは `BOOCH_WSL_CONF` で差し替えられる（テスト用）。
+
 ## [1.5.0] - 2026-07-15
 
 ### Added
@@ -166,7 +176,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/kan/booch/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/kan/booch/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/kan/booch/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/kan/booch/compare/v1.2.1...v1.3.0

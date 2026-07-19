@@ -95,4 +95,65 @@ test_doctor_interop_warns_when_not_persisted() {
   assert_contains "$out" "not persisted"
 }
 
+
+# --- booch_wsl_ensure_systemd（BOOCH_WSL_CONF を temp に向け、sudo をスタブして実処理を検証） ---
+# sudo は素通し（テストは temp ファイルを書くだけ）。
+_setup_wsl_conf() {
+  BOOCH_WSL_CONF="$(mktemp)"
+  sudo() { "$@"; }
+  booch_wsl_is_wsl() { return 0; }
+}
+
+test_ensure_systemd_noop_when_not_wsl() {
+  _setup_wsl_conf
+  booch_wsl_is_wsl() { return 1; }
+  : > "$BOOCH_WSL_CONF"
+  local out; out=$(booch_wsl_ensure_systemd 2>&1)
+  assert_eq "" "$out"
+  assert_eq "" "$(cat "$BOOCH_WSL_CONF")"
+}
+
+test_ensure_systemd_noop_when_already_enabled() {
+  _setup_wsl_conf
+  printf '[boot]\nsystemd=true\n' > "$BOOCH_WSL_CONF"
+  local out; out=$(booch_wsl_ensure_systemd 2>&1)
+  assert_eq "" "$out"
+}
+
+test_ensure_systemd_appends_boot_section_when_missing() {
+  _setup_wsl_conf
+  printf '[automount]\nenabled=true\n' > "$BOOCH_WSL_CONF"
+  booch_wsl_ensure_systemd >/dev/null 2>&1
+  local conf; conf=$(cat "$BOOCH_WSL_CONF")
+  assert_contains "$conf" "[boot]"
+  assert_contains "$conf" "systemd=true"
+  assert_contains "$conf" "[automount]"   # 既存セクションを壊さない
+}
+
+test_ensure_systemd_inserts_into_existing_boot_section() {
+  _setup_wsl_conf
+  printf '[boot]\ncommand=echo hi\n' > "$BOOCH_WSL_CONF"
+  booch_wsl_ensure_systemd >/dev/null 2>&1
+  local conf; conf=$(cat "$BOOCH_WSL_CONF")
+  # [boot] は 1 つのまま（重複セクションを作らない）
+  assert_eq "1" "$(grep -c '^\[boot\]' "$BOOCH_WSL_CONF")"
+  assert_contains "$conf" "systemd=true"
+  assert_contains "$conf" "command=echo hi"
+}
+
+test_ensure_systemd_is_idempotent() {
+  _setup_wsl_conf
+  : > "$BOOCH_WSL_CONF"
+  booch_wsl_ensure_systemd >/dev/null 2>&1
+  booch_wsl_ensure_systemd >/dev/null 2>&1
+  assert_eq "1" "$(grep -c 'systemd=true' "$BOOCH_WSL_CONF")"
+}
+
+test_ensure_systemd_warns_about_restart() {
+  _setup_wsl_conf
+  : > "$BOOCH_WSL_CONF"
+  local err; err=$(booch_wsl_ensure_systemd 2>&1 >/dev/null)
+  assert_contains "$err" "wsl --shutdown"
+}
+
 run_tests

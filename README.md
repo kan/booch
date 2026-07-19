@@ -57,7 +57,7 @@ booch/
 │   ├── fs.sh                     # symlink 配置 / TOML キーの冪等更新
 │   ├── git.sh                    # 自己更新（pull→再exec）/ 複数リポジトリの ff-only pull
 │   ├── cleanup.sh                # cleanup フレーム（コマンド実行表示 / 解放量 / docker 安全 prune）
-│   ├── wsl.sh                    # WSL 判定 / binfmt interop 診断
+│   ├── wsl.sh                    # WSL 判定 / binfmt interop 診断 / systemd 有効化
 │   ├── docker.sh                 # docker post-install（グループ / デーモン / 再ログイン案内）
 │   └── scaffold.sh               # 利用側 dotfiles 雛形の生成（booch init の実体）
 ├── jobs/
