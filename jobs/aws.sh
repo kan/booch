@@ -17,6 +17,7 @@
 #   booch_aws_cli_latest                 最新 aws-cli 版（公式 CHANGELOG）
 #   booch_aws_cli_install <arch>         AWS CLI の導入（副作用）
 #   booch_aws_ssm_installed_version      現在の SSM plugin 版（未導入なら空）
+#   booch_aws_ssm_latest                 最新 SSM plugin 版（公式 /latest/VERSION）
 #   booch_aws_ssm_install <arch>         SSM plugin の導入（副作用）
 
 # AWS の配布アーキ名（x86_64 / aarch64）。lib/arch.sh の rust 系ラッパー。
@@ -54,6 +55,15 @@ booch_aws_ssm_installed_version() {
   session-manager-plugin --version 2>/dev/null
 }
 
+# 公式配布の最新版（/latest/VERSION）。session-manager-plugin --version と同じ
+# "1.2.835.0" 形式で返る。改行を伴わないことがあるので空白・CR を落として正規化する。
+booch_aws_ssm_latest() {
+  local out
+  out=$(curl -fsSL --max-time 15 \
+    https://s3.amazonaws.com/session-manager-downloads/plugin/latest/VERSION 2>/dev/null) || return 1
+  printf '%s' "$out" | tr -d '[:space:]'
+}
+
 # arch → 公式配布の deb ディレクトリ名。
 booch_aws_ssm_deb_dir() { # arch
   case "$1" in
@@ -88,17 +98,22 @@ job_aws() {
   [ -n "$latest_cli" ] || { echo "aws: 最新版を取得できません" >&2; return 1; }
   booch_job_sync "AWS CLI" "aws-cli" "$cur_cli" "$latest_cli" booch_aws_cli_install "$arch"
 
-  # SSM Plugin: upstream に版確認の手段が無く /latest/ しか無いため、毎回再取得すると冪等性
-  # （再実行で無駄に再取得しない）を損ね、オフライン時に現状維持できず失敗する。未導入のとき
-  # だけ導入し、導入済みは現状維持（current）とする。更新したいときは利用側がプラグインを
-  # 消して再実行する。
-  local ssm_ver
-  ssm_ver=$(booch_aws_ssm_installed_version)
-  if [ -z "$ssm_ver" ]; then
+  # SSM Plugin: /latest/VERSION に upstream の版が出るので、CLI と同じく版比較で更新要否を
+  # 判定する（毎回 deb を落とし直すと冪等性を損ねる一方、未導入時のみ導入だと初回の版で
+  # 凍結して以後どれだけ古くなっても更新が入らない）。
+  # 版を取れないとき（オフライン / 配布側の変更）は、空版での誤 update を避けるため
+  # 「未導入なら導入・導入済みは現状維持」へフォールバックする。
+  local ssm_cur ssm_latest
+  ssm_cur=$(booch_aws_ssm_installed_version)
+  ssm_latest=$(booch_aws_ssm_latest) || ssm_latest=""
+  if [ -n "$ssm_latest" ]; then
+    booch_job_sync "SSM Plugin" "session-manager-plugin" "$ssm_cur" "$ssm_latest" \
+      booch_aws_ssm_install "$arch"
+  elif [ -z "$ssm_cur" ]; then
     booch_status "installing session-manager-plugin..."
     booch_aws_ssm_install "$arch"
     booch_result "SSM Plugin" installed "" "$(booch_aws_ssm_installed_version)"
   else
-    booch_result "SSM Plugin" current "$ssm_ver"
+    booch_result "SSM Plugin" current "$ssm_cur"
   fi
 }

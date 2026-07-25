@@ -20,6 +20,16 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
   （導入後の版だけを見ると更新が `current` に潰れ、本体だけプラグインと非対称だった）。導入
   コマンドの出力は outcome 行に混ざらないよう stderr へ寄せる。`booch_claude_install`
   （出力なし）は互換のまま残す。
+- `booch_aws_ssm_latest`（`jobs/aws.sh`）: Session Manager Plugin の最新版を公式の
+  `/latest/VERSION` から取る seam。
+
+### Fixed
+
+- `job_aws`（`jobs/aws.sh`）の Session Manager Plugin が初回導入時の版で凍結し、以後どれだけ
+  古くなっても更新が入らなかった。「upstream に版確認の手段が無い」として未導入時のみ導入して
+  いたが、実際には `/latest/VERSION` が版を返すので、AWS CLI と同じく `booch_job_sync` による
+  版比較で更新する。版を取れないとき（オフライン等）は空版での誤 update を避け、従来どおり
+  「未導入なら導入・導入済みは現状維持」へフォールバックする。
 
 ## [1.6.0] - 2026-07-19
 
