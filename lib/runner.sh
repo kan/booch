@@ -153,6 +153,22 @@ booch_job_sync() { # label noun current latest install_cmd...
   fi
 }
 
+# 導入の前後で取った版から installed / updated / current を判定してサマリー行を記録する。
+# 「入れてみるまで最新版が分からない」自己更新型のツール（インストーラ任せ / npm install /
+# uv tool upgrade 等）向け。導入前に最新版を引けるなら booch_job_sync を使う。
+# 前後の版を取らずに導入後の版だけを current で記録すると、更新しても「変化なし」としか
+# 出ず、サマリーが更新の記録として機能しなくなる。
+booch_result_ver() { # label old new
+  local label=$1 old=${2:-} new=${3:-}
+  if [ -z "$old" ]; then
+    booch_result "$label" installed "" "$new"
+  elif [ "$old" != "$new" ]; then
+    booch_result "$label" updated "$old" "$new"
+  else
+    booch_result "$label" current "$new"
+  fi
+}
+
 # concurrent から実際に起動されるラッパー。
 #
 # 実行モデルはタイムアウト有無で一致させる: どちらも declare -f で全関数定義を持ち込む

@@ -64,6 +64,64 @@ test_claude_installed_version_empty_when_absent() {
   BOOCH_CLAUDE_BIN="/nonexistent/claude"
   assert_eq "" "$(booch_claude_installed_version)"
 }
+
+# --- 本体 ensure（outcome 行）---
+# 版は状態ファイルで表現する（fake claude が実行時にそれを読む）。install stub が
+# その版を書き換えることで「更新された / されなかった」を作り分ける。
+_claude_ensure_fixture() { # dir version
+  BOOCH_CLAUDE_BIN="$1/claude"
+  printf '%s' "$2" > "$1/version"
+  printf '#!/bin/sh\ncat "%s/version"\n' "$1" > "$BOOCH_CLAUDE_BIN"
+  chmod +x "$BOOCH_CLAUDE_BIN"
+}
+
+# 導入で版が上がれば "updated\t<old>\t<new>"（前後で版を取り直している回帰ガード）。
+test_claude_ensure_outputs_updated() {
+  local d; d=$(mktemp -d); _claude_ensure_fixture "$d" "2.1.195 (Claude Code)"
+  booch_claude_install() { printf '2.1.220 (Claude Code)' > "$d/version"; }
+  local out; out=$(booch_claude_ensure)
+  rm -rf "$d"
+  assert_eq "$(printf 'updated\t2.1.195\t2.1.220')" "$out"
+}
+
+# 版が変わらなければ "current\t<v>\t<v>"。
+test_claude_ensure_outputs_current_when_unchanged() {
+  local d; d=$(mktemp -d); _claude_ensure_fixture "$d" "2.1.220 (Claude Code)"
+  booch_claude_install() { :; }
+  local out; out=$(booch_claude_ensure)
+  rm -rf "$d"
+  assert_eq "$(printf 'current\t2.1.220\t2.1.220')" "$out"
+}
+
+# 未導入からの導入は "installed\t\t<new>"（old は空）。
+test_claude_ensure_outputs_installed_when_absent() {
+  local d; d=$(mktemp -d); BOOCH_CLAUDE_BIN="$d/claude"
+  booch_claude_install() { _claude_ensure_fixture "$d" "2.1.220 (Claude Code)"; }
+  local out; out=$(booch_claude_ensure)
+  rm -rf "$d"
+  assert_eq "$(printf 'installed\t\t2.1.220')" "$out"
+}
+
+# install 失敗は非 0 を返し outcome 行は出さない（呼び出し側が failed を書けるように）。
+test_claude_ensure_install_failure_returns_error_without_output() {
+  BOOCH_CLAUDE_BIN="/nonexistent/claude"
+  booch_claude_install() { return 1; }
+  local out rc
+  if out=$(booch_claude_ensure 2>/dev/null); then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "" "$out" "失敗時は outcome を出さない"
+}
+
+# 導入コマンドの出力は stderr へ寄せ、stdout の outcome 行に混ぜない
+# （混ざると利用側の "<status>\t<old>\t<new>" パースが壊れる）。
+test_claude_ensure_install_output_does_not_pollute_stdout() {
+  local d; d=$(mktemp -d); _claude_ensure_fixture "$d" "2.1.220 (Claude Code)"
+  booch_claude_install() { echo "installing..."; }
+  local out; out=$(booch_claude_ensure 2>/dev/null)
+  rm -rf "$d"
+  assert_eq "$(printf 'current\t2.1.220\t2.1.220')" "$out"
+}
+
 # runner の bash -c 子（ジョブ）に伝わるよう BOOCH_CLAUDE_BIN は export されている。
 test_claude_bin_is_exported() {
   assert_eq "$BOOCH_CLAUDE_BIN" "$(bash -c 'printf %s "${BOOCH_CLAUDE_BIN:-UNSET}"')"

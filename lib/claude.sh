@@ -5,16 +5,18 @@
 #
 # 使い方:
 #   source "$BOOCH_ROOT/lib/claude.sh"
-#   booch_claude_install
+#   booch_claude_ensure                                 # 本体。outcome を stdout に 1 行返す
 #   booch_claude_marketplace_ensure <owner>/<marketplace>
 #   booch_claude_marketplace_update_all
 #   booch_claude_plugin_ensure <plugin>@<marketplace>   # outcome を stdout に 1 行返す
 #
-# booch_claude_plugin_ensure は導入結果を stdout にタブ区切り 1 行
+# booch_claude_ensure / booch_claude_plugin_ensure は導入結果を stdout にタブ区切り 1 行
 # "<status>\t<old>\t<new>"（status= installed|updated|current）で返す。利用側（ジョブ）は
 # これを受けて booch_result を書ける（役割分担: ヘルパー=動作、ジョブ=報告）。例:
 #   IFS=$'\t' read -r status old new < <(booch_claude_plugin_ensure acme-tools@acme)
 #   booch_result "  acme-tools" "$status" "$old" "$new"
+#
+# 本体の導入だけで報告が要らない場合は booch_claude_install を直接呼んでよい（出力なし）。
 #
 # PATH 上の claude は WSL 経由で Windows 版を拾うことがあるため、install.sh が置く
 # Linux 版（既定 ~/.local/bin/claude）に固定する。BOOCH_CLAUDE_BIN で上書き可能。
@@ -62,6 +64,36 @@ booch_claude_install() {
     echo "claude: 導入後も見つかりません: $BOOCH_CLAUDE_BIN" >&2
     return 1
   }
+}
+
+# `claude --version` は "2.1.220 (Claude Code)" のように版の後ろに製品名が付く。報告用に
+# 版だけを残す（プラグインの版表示と粒度を揃える）。doctor 等が使う
+# booch_claude_installed_version は生の 1 行のままにし、ここでは加工しない。
+_booch_claude_ver_short() { # version-line
+  local v=$1
+  v=${v#"${v%%[![:space:]]*}"}   # 先頭空白除去
+  printf '%s' "${v%%[[:space:]]*}"
+}
+
+# 本体を導入/更新し、結果を stdout にタブ区切り 1 行 "<status>\t<old>\t<new>"
+# （status= installed|updated|current）で返す（booch_claude_plugin_ensure と同じ契約）。
+# 版は導入の前後で取り直す。後だけ見ると更新が current に潰れ、サマリーに版の変化が
+# 出ない（本体だけプラグインと非対称になる）。
+# 導入コマンド（claude update / インストーラ）の出力は stdout の outcome 行に混ざらない
+# よう stderr へ寄せる（ジョブのログには残る）。install 失敗は非 0 を返し outcome は出さない。
+booch_claude_ensure() { # -> "<status>\t<old>\t<new>"
+  local old new status
+  old=$(_booch_claude_ver_short "$(booch_claude_installed_version)")
+  booch_claude_install >&2 || return 1
+  new=$(_booch_claude_ver_short "$(booch_claude_installed_version)")
+  if [ -z "$old" ]; then
+    status=installed
+  elif [ "$old" != "$new" ]; then
+    status=updated
+  else
+    status=current
+  fi
+  printf '%s\t%s\t%s\n' "$status" "$old" "$new"
 }
 
 # marketplace を冪等に追加する。list の "Source: GitHub (owner/repo)" に source が

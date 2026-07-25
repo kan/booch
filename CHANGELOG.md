@@ -5,6 +5,22 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-25
+
+### Added
+
+- `booch_result_ver`（`lib/runner.sh`）: 導入の前後で取った版から installed / updated / current を
+  判定してサマリー行を記録する。「入れてみるまで最新版が分からない」自己更新型のツール
+  （インストーラ任せ / `npm install` / `uv tool upgrade` 等）向け。導入後の版だけを `current` で
+  記録すると更新しても「変化なし」としか出ず、サマリーが更新の記録として機能しないため。
+  導入前に最新版を引けるツールは従来どおり `booch_job_sync`。
+- `booch_claude_ensure`（`lib/claude.sh`）: Claude Code 本体を導入/更新し、結果を
+  `booch_claude_plugin_ensure` と同じ `"<status>\t<old>\t<new>"`（installed / updated / current）
+  で返す。版を導入の前後で取り直すため、利用側は本体の更新をサマリーへ `old → new` で出せる
+  （導入後の版だけを見ると更新が `current` に潰れ、本体だけプラグインと非対称だった）。導入
+  コマンドの出力は outcome 行に混ざらないよう stderr へ寄せる。`booch_claude_install`
+  （出力なし）は互換のまま残す。
+
 ## [1.6.0] - 2026-07-19
 
 ### Added
@@ -176,7 +192,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/kan/booch/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/kan/booch/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/kan/booch/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/kan/booch/compare/v1.3.0...v1.4.0

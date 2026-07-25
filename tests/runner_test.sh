@@ -19,6 +19,11 @@ _j_migrated()  { booch_result "tool-m" migrated "old" "new"; }
 _j_fail()      { return 1; }
 _j_slow()      { sleep 3; }
 _j_pipe()      { false | true; booch_result "pipe" current "ran"; }
+_j_result_ver() {
+  booch_result_ver "ver-new"  ""      "1.0.0"
+  booch_result_ver "ver-up"   "1.0.0" "1.1.0"
+  booch_result_ver "ver-same" "2.0.0" "2.0.0"
+}
 
 test_summary_renders_all_statuses() {
   booch_runner_init
@@ -32,6 +37,18 @@ test_summary_renders_all_statuses() {
   assert_contains "$out" "updated    1.0.0 → 1.1.0"
   assert_contains "$out" "latest     2.0.0"
   assert_contains "$out" "migrated   old → new"
+}
+
+# 導入前後の版から status を決める（版が変われば updated として old → new を残す）。
+test_result_ver_maps_versions_to_status() {
+  booch_runner_init
+  booch_job v "ver" _j_result_ver 60
+  local out
+  out=$(booch_run)
+  assert_contains "$out" "ver-new"
+  assert_contains "$out" "installed  1.0.0"
+  assert_contains "$out" "updated    1.0.0 → 1.1.0"
+  assert_contains "$out" "latest     2.0.0"
 }
 
 # 非 0 終了したジョブは自身では failed 行を書けない。_booch_exec が補う。
