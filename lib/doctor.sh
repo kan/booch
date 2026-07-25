@@ -54,6 +54,15 @@ booch_ver_norm() { # version
   printf '%s' "$v"
 }
 
+# a が b より新しいか（バージョン順比較。正規化済みの値を渡す）。同値なら 1。
+# 数値として比較できない文字列でも sort -V の順序で決着する（診断表示用なので厳密さより
+# 落ちないことを優先する）。
+booch_ver_gt() { # a b
+  local a=$1 b=$2
+  [ "$a" = "$b" ] && return 1
+  [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -1)" = "$a" ]
+}
+
 # ラベル列の幅を解決する。BOOCH_DOCTOR_LABEL_WIDTH を優先し、正の整数以外
 # （非数値・0・負・空）は既定 30 へフォールバックする（%-*s の幅引数に非数値が
 # 渡って printf が壊れるのを防ぐ）。
@@ -100,20 +109,32 @@ booch_doctor_row() { # label status [value] [note]
 }
 
 # current / latest を比較して適切な行を出す便利関数。
-#   current 空        → missing
-#   latest 空         → ok（latest 不明）
-#   正規化して不一致  → outdated
-#   一致              → ok
+#   current 空          → missing
+#   latest 空           → ok（latest 不明）
+#   latest の方が新しい → outdated（更新を促す）
+#   current の方が新しい→ ok（latest を併記。更新は促さない）
+#   一致                → ok
+# 不一致を一律 outdated にすると、配布元より手元が進んでいるとき（自己更新するツールが
+# レジストリの反映より先行する / プレリリースを入れている）に「更新あり」と促してしまい、
+# 実行しても何も起きない案内になる。順序で比較して「遅れているときだけ」促す。
 booch_doctor_tool() { # label current latest
-  local label=$1 current=$2 latest=$3
+  local label=$1 current=$2 latest=$3 cur_n lat_n
   if [ -z "$current" ]; then
     booch_doctor_row "$label" missing
-  elif [ -z "$latest" ]; then
+    return
+  fi
+  if [ -z "$latest" ]; then
     booch_doctor_row "$label" ok "$current  (latest: unknown)"
-  elif [ "$(booch_ver_norm "$current")" != "$(booch_ver_norm "$latest")" ]; then
+    return
+  fi
+  cur_n=$(booch_ver_norm "$current")
+  lat_n=$(booch_ver_norm "$latest")
+  if [ "$cur_n" = "$lat_n" ]; then
+    booch_doctor_row "$label" ok "$current"
+  elif booch_ver_gt "$lat_n" "$cur_n"; then
     booch_doctor_row "$label" outdated "$current" "$latest"
   else
-    booch_doctor_row "$label" ok "$current"
+    booch_doctor_row "$label" ok "$current  (latest: $latest)"
   fi
 }
 

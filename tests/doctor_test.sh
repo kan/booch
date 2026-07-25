@@ -80,6 +80,46 @@ test_doctor_tool_ok_when_only_prefix_differs() {
   assert_not_contains "$out" "update available"
   assert_contains "$out" "[OK]"
 }
+# 手元が配布元より新しいとき（自己更新がレジストリ反映より先行 / プレリリース）は
+# 「更新あり」と促さない。促しても実行して何も起きない案内になるため。
+test_doctor_tool_ok_when_current_ahead_of_latest() {
+  booch_doctor_init
+  local out; out=$(booch_doctor_tool "claude" "2.1.220 (Claude Code)" "2.1.219")
+  assert_not_contains "$out" "update available"
+  assert_contains "$out" "[OK]"
+  assert_contains "$out" "latest: 2.1.219"
+  # 先行しているだけなので outdated 集計も立てない。
+  booch_doctor_init
+  booch_doctor_tool "claude" "2.1.220 (Claude Code)" "2.1.219" >/dev/null
+  assert_eq "0" "$BOOCH_DOCTOR_OUTDATED"
+}
+# 桁数の違う版を辞書順で誤判定しない（2.1.9 < 2.1.10）。
+test_doctor_tool_outdated_compares_numerically() {
+  booch_doctor_init
+  local out; out=$(booch_doctor_tool "x" "2.1.9" "2.1.10")
+  assert_contains "$out" "update available: 2.1.10"
+  booch_doctor_init
+  out=$(booch_doctor_tool "x" "2.1.10" "2.1.9")
+  assert_not_contains "$out" "update available"
+}
+
+# --- booch_ver_gt ---
+test_ver_gt_true_when_newer() {
+  local rc; if booch_ver_gt "1.2.4" "1.2.3"; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+test_ver_gt_false_when_older() {
+  local rc; if booch_ver_gt "1.2.3" "1.2.4"; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+test_ver_gt_false_when_equal() {
+  local rc; if booch_ver_gt "1.2.3" "1.2.3"; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+test_ver_gt_compares_numerically() {
+  local rc; if booch_ver_gt "1.2.10" "1.2.9"; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
 
 # booch_doctor_tool は捕捉サブシェルで集計を更新しても親へ伝わらないため、
 # outdated の集計は row を直接呼んで（同一シェルで）確認する。

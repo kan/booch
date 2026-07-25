@@ -5,6 +5,22 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-07-25
+
+### Fixed
+
+- `booch_doctor_tool`（`lib/doctor.sh`）が current と latest の不一致を一律 `outdated`
+  （update available）にしていたため、手元が配布元より **新しい** ときにも更新を促していた
+  （自己更新するツールがレジストリの反映より先行する / プレリリースを入れている場合。実例:
+  claude 2.1.220 に対し npm registry が 2.1.219 で「update available: 2.1.219」）。順序で
+  比較し、latest の方が新しいときだけ `outdated` にする。手元が先行しているときは `ok` で
+  latest を併記するに留める。
+
+### Added
+
+- `booch_ver_gt <a> <b>`（`lib/doctor.sh`）: 正規化済みバージョンの順序比較（`sort -V`）。
+  利用側が「遅れているときだけ警告する」判定を書けるようにする公開ヘルパー。
+
 ## [1.7.0] - 2026-07-25
 
 ### Added
@@ -202,7 +218,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/kan/booch/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/kan/booch/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/kan/booch/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/kan/booch/compare/v1.4.0...v1.5.0
