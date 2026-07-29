@@ -138,6 +138,34 @@ booch_doctor_tool() { # label current latest
   fi
 }
 
+# ファイルシステムの空き容量を 1 行で出す。warn_gb 未満なら warn（＋案内 hint）。
+# ディスク逼迫は「ツールが最新か」とは別軸だが、放置すると導入・ビルドが静かに失敗するので
+# 診断に載せる。df が読めないパスは skip（診断自体は落とさない）。
+#   booch_doctor_disk "disk /" / 20 "'dotfiles cleanup' で掃除できます"
+booch_doctor_disk() { # label path warn_gb [hint]
+  local label=$1 path=$2 warn_gb=$3 hint=${4:-}
+  local avail_kb size_kb used_pct avail_h size_h value
+  avail_kb=$(df -k --output=avail "$path" 2>/dev/null | tail -1 | tr -d ' ')
+  case "$avail_kb" in '' | *[!0-9]*)
+    booch_doctor_row "$label" skip "空き容量を取得できません（$path）"
+    return ;;
+  esac
+  size_kb=$(df -k --output=size "$path" 2>/dev/null | tail -1 | tr -d ' ')
+  case "$size_kb" in '' | *[!0-9]*) size_kb=0 ;; esac
+  used_pct=$(df -k --output=pcent "$path" 2>/dev/null | tail -1 | tr -d ' %')
+  avail_h=$(numfmt --to=iec $((avail_kb * 1024)) 2>/dev/null || echo "${avail_kb}K")
+  size_h=$(numfmt --to=iec $((size_kb * 1024)) 2>/dev/null || echo "${size_kb}K")
+  value="空き $avail_h / $size_h"
+  [ -n "$used_pct" ] && value="$value（使用 ${used_pct}%）"
+  case "$warn_gb" in '' | *[!0-9]*) warn_gb=0 ;; esac
+  if [ "$warn_gb" -gt 0 ] && [ "$avail_kb" -lt $((warn_gb * 1024 * 1024)) ]; then
+    booch_doctor_row "$label" warn "$value ← ${warn_gb}GB 未満"
+    [ -n "$hint" ] && printf '    %s\n' "$hint"
+  else
+    booch_doctor_row "$label" ok "$value"
+  fi
+}
+
 # 集計の最終行を出し、終了コードを返す（missing があれば 1、それ以外は 0）。
 # outdated / warn は 0 のまま（メッセージのみ。run を促す材料として使う）。
 booch_doctor_summary() {

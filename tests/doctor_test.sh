@@ -367,4 +367,62 @@ test_doctor_apt_untracked_ok_when_all_tracked() {
   assert_contains "$(BOOCH_DOCTOR_APT_AUDIT=1 booch_doctor_apt_untracked foo bar)" "[OK]"
 }
 
+# --- booch_doctor_disk（df をスタブして閾値判定を検証） ---
+# df -k --output=<field> は「見出し行 + 値」を返すので、その形をスタブで再現する。
+test_doctor_disk_ok_above_threshold() {
+  booch_doctor_init
+  df() {
+    case "$*" in
+      *avail*) printf 'Avail\n%s\n' $((100 * 1024 * 1024)) ;;   # 100GB
+      *size*)  printf 'Size\n%s\n'  $((500 * 1024 * 1024)) ;;
+      *pcent*) printf 'Use%%\n80%%\n' ;;
+    esac
+  }
+  local out; out=$(booch_doctor_disk "disk /" / 20)
+  assert_contains "$out" "[OK]"
+  assert_eq "0" "$BOOCH_DOCTOR_WARN"
+}
+
+test_doctor_disk_warns_below_threshold() {
+  booch_doctor_init
+  df() {
+    case "$*" in
+      *avail*) printf 'Avail\n%s\n' $((10 * 1024 * 1024)) ;;    # 10GB
+      *size*)  printf 'Size\n%s\n'  $((500 * 1024 * 1024)) ;;
+      *pcent*) printf 'Use%%\n98%%\n' ;;
+    esac
+  }
+  local out; out=$(booch_doctor_disk "disk /" / 20 "cleanup を検討してください")
+  assert_contains "$out" "[WARN]"
+  assert_contains "$out" "20GB 未満"
+  assert_contains "$out" "cleanup を検討してください"
+  # 集計は現シェルで見る（$() はサブシェルなので状態が伝播しない）。
+  booch_doctor_disk "disk /" / 20 >/dev/null
+  assert_eq "1" "$BOOCH_DOCTOR_WARN"
+}
+
+# 閾値 0（無効）や非数値なら警告しない。
+test_doctor_disk_no_warn_when_threshold_zero() {
+  booch_doctor_init
+  df() {
+    case "$*" in
+      *avail*) printf 'Avail\n1024\n' ;;
+      *size*)  printf 'Size\n2048\n' ;;
+      *pcent*) printf 'Use%%\n99%%\n' ;;
+    esac
+  }
+  assert_contains "$(booch_doctor_disk "disk /" / 0)" "[OK]"
+  assert_contains "$(booch_doctor_disk "disk /" / "")" "[OK]"
+}
+
+# df が値を返さないパスは skip（診断自体は落とさない）。
+test_doctor_disk_skips_when_df_fails() {
+  booch_doctor_init
+  df() { return 1; }
+  local out; out=$(booch_doctor_disk "disk /nope" /nope 20)
+  assert_contains "$out" "[SKIP]"
+  booch_doctor_disk "disk /nope" /nope 20 >/dev/null
+  assert_eq "0" "$BOOCH_DOCTOR_WARN"   # 取得失敗を警告に化かさない
+}
+
 run_tests

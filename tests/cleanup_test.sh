@@ -66,6 +66,45 @@ test_docker_prune_with_builder() {
   assert_contains "$out" "docker builder prune"
 }
 
+# --- booch_cleanup_docker_prune_deep ---
+test_docker_prune_deep_skips_when_unavailable() {
+  command() { return 1; }   # docker 不在
+  assert_contains "$(booch_cleanup_docker_prune_deep true)" "docker unavailable"
+}
+
+# 確認で no（tty 無しを含む）なら 1 つも prune せず手動手順を案内する。
+test_docker_prune_deep_declined_runs_nothing() {
+  command() { case "$2" in docker) return 0 ;; *) builtin command "$@" ;; esac; }
+  docker() { case "$1" in info) return 0 ;; *) echo "docker $*" ;; esac; }
+  booch_confirm_yes_no() { return 1; }
+  local out; out=$(booch_cleanup_docker_prune_deep false)
+  assert_contains "$out" "見送りました"
+  assert_not_contains "$out" '$ docker image prune -af'
+}
+
+# 承諾（assume_yes 相当）ならタグ付き未使用イメージとビルドキャッシュを消す。
+test_docker_prune_deep_accepted_runs_prunes() {
+  command() { case "$2" in docker) return 0 ;; *) builtin command "$@" ;; esac; }
+  docker() { case "$1" in info) return 0 ;; *) echo "docker $*" ;; esac; }
+  booch_confirm_yes_no() { return 0; }
+  local out; out=$(booch_cleanup_docker_prune_deep true)
+  assert_contains "$out" "docker builder prune -af"
+  assert_contains "$out" "docker image prune -af"
+  # volume は自動削除しない（DB データを含みうる）。
+  assert_not_contains "$out" "volume prune"
+}
+
+# 見込み表示は docker system df の該当セルを使う（取れなければ unknown）。
+test_docker_prune_deep_reports_reclaimable() {
+  command() { case "$2" in docker) return 0 ;; *) builtin command "$@" ;; esac; }
+  docker() { case "$1" in info) return 0 ;; *) echo "docker $*" ;; esac; }
+  booch_cleanup_docker_df_field() { case "$2" in reclaimable) echo "44.11GB (69%)" ;; size) echo "41.51GB" ;; esac; }
+  booch_confirm_yes_no() { return 1; }
+  local out; out=$(booch_cleanup_docker_prune_deep false)
+  assert_contains "$out" "44.11GB"
+  assert_contains "$out" "41.51GB"
+}
+
 # --- booch_cleanup_worktree_prune ---
 # 実体が消えた worktree の登録メタだけを prune する（実在 worktree は消さない）。
 test_worktree_prune_removes_stale_registration() {

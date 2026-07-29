@@ -64,4 +64,24 @@ test_confirm_skips_when_user_declines() {
   assert_contains "$out" "スキップ"
 }
 
+# --- booch_confirm_yes_no（汎用 y/N。プロンプト本体は booch_confirm_ask をスタブ） ---
+test_yes_no_skips_prompt_when_assume_yes() {
+  booch_confirm_ask() { return 1; }   # 尋ねられたら no（呼ばれてはいけない）
+  local rc; if booch_confirm_yes_no "消しますか?" true; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+test_yes_no_follows_prompt_yes() {
+  booch_confirm_ask() { return 0; }
+  local rc; if booch_confirm_yes_no "消しますか?" false; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+# tty 無し（非対話）は booch_confirm_ask が 1 を返すので no になる。
+test_yes_no_declines_without_tty() {
+  booch_confirm_ask() { return 1; }
+  local rc; if booch_confirm_yes_no "消しますか?"; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+
 run_tests

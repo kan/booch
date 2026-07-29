@@ -52,13 +52,13 @@ booch/
 │   ├── uv.sh                     # uv 本体と uv tool の冪等な導入 / 更新
 │   ├── claude.sh                 # Claude Code 本体 / marketplace / plugin の冪等な導入・更新
 │   ├── npm.sh                    # ローカル npm プロジェクト同期 / グローバル install
-│   ├── confirm.sh                # 更新確認のフレーム（登録前の y/N 判断・tty プロンプト）
+│   ├── confirm.sh                # 更新確認 / 汎用 y/N のフレーム（tty プロンプト）
 │   ├── sudo.sh                   # 並列ジョブ向け sudo 事前キャッシュ + キープアライブ
 │   ├── fs.sh                     # symlink 配置 / TOML キーの冪等更新
 │   ├── git.sh                    # 自己更新（pull→再exec）/ 複数リポジトリの ff-only pull
-│   ├── cleanup.sh                # cleanup フレーム（コマンド実行表示 / 解放量 / docker 安全 prune）
+│   ├── cleanup.sh                # cleanup フレーム（コマンド実行表示 / 解放量 / docker prune 安全・深い）
 │   ├── wsl.sh                    # WSL 判定 / binfmt interop 診断 / systemd 有効化
-│   ├── docker.sh                 # docker post-install（グループ / デーモン / 再ログイン案内）
+│   ├── docker.sh                 # docker post-install（グループ / デーモン）+ daemon.json のキー単位更新
 │   └── scaffold.sh               # 利用側 dotfiles 雛形の生成（booch init の実体）
 ├── jobs/
 │   ├── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新

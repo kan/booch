@@ -5,6 +5,31 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-07-29
+
+### Added
+
+- `booch_cleanup_docker_prune_deep [assume_yes]`（`lib/cleanup.sh`）: 未使用タグ付き
+  イメージ（`docker image prune -af`）とビルドキャッシュ全体（`docker builder prune -af`）を
+  回収する深い prune。安全版（`booch_cleanup_docker_prune_safe`）は dangling しか消さないため、
+  タグ付き未使用イメージとキャッシュが青天井に溜まる。消し過ぎると再取得・再ビルドが走るので
+  既定で y/N 確認を挟み（非対話は見送り）、volume は DB データを含みうるため触らない。
+- `booch_cleanup_docker_df_field <type> <field>`（`lib/cleanup.sh`）: `docker system df` の
+  1 セル（size / reclaimable）を返す seam。deep prune の回収見込み表示に使う。
+- `booch_confirm_yes_no <prompt> [assume_yes]` / `booch_confirm_ask <prompt>`
+  （`lib/confirm.sh`）: 更新確認に限らない汎用の y/N。破壊的操作の実行可否を尋ねる用途。
+- `booch_docker_daemon_config_ensure <json_fragment> [jq_post_filter]`（`lib/docker.sh`）:
+  `daemon.json` を渡したキーだけ更新する（丸ごと上書きせず利用者の他キーを温存。差分が
+  無ければ書かない）。書く前に `dockerd --validate` を通し、失敗時は現行設定を残す。
+  `jq_post_filter` で旧キーの削除など整理も渡せる。実体パスは
+  `BOOCH_DOCKER_DAEMON_CONFIG`、更新有無は `BOOCH_DOCKER_DAEMON_CONFIG_CHANGED`。
+- `booch_docker_daemon_restart_if_idle`（`lib/docker.sh`）: 設定を更新したときだけ docker を
+  再起動する。稼働中コンテナがあれば再起動せず案内に留める（日々の setup で作業中のスタックを
+  落とさないため）。
+- `booch_doctor_disk <label> <path> <warn_gb> [hint]`（`lib/doctor.sh`）: ファイルシステムの
+  空き容量行。閾値未満で warn（＋案内）。ディスク逼迫は放置すると導入・ビルドが静かに失敗
+  するため診断に載せられるようにする。
+
 ## [1.7.1] - 2026-07-25
 
 ### Fixed
@@ -218,7 +243,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/kan/booch/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/kan/booch/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/kan/booch/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/kan/booch/compare/v1.5.0...v1.6.0
