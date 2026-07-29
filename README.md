@@ -264,11 +264,13 @@ gomod / npm、CodeQL 等）はそのまま適用できない。構成に合わ�
 | 施策 | 採否 | 内容 / 理由 |
 |---|---|---|
 | Dependabot（github-actions） | ✅ 採用 | `.github/dependabot.yml`。ワークフローが使う Actions のバージョンを週次で追従 |
+| Actions の commit SHA ピン | ✅ 採用 | `uses:` を可動タグではなく commit SHA で固定し、タグ付け替えを防ぐ。版更新は Dependabot が PR で運ぶ |
 | Dependabot alerts / security updates | ✅ 採用 | 既知脆弱性のある Actions を検知・自動更新（リポジトリ設定で有効化） |
 | Dependabot（gomod / npm 等） | — 非該当 | package manifest を持たないため対象外 |
 | Secret scanning / Push protection | ✅ 採用 | トークン等の混入を検出・ブロック（GitHub 標準・有効） |
 | Code scanning（CodeQL） | — 非該当 | CodeQL は Bash を直接サポートしない |
 | Code scanning（ShellCheck → SARIF） | ✅ 採用 | `.github/workflows/security.yml`。CodeQL の代替として ShellCheck の結果を Security タブへ連携。失敗ゲートは CI の `shellcheck -x` が担う |
+| ShellCheck の版揃え | ✅ 採用 | CI はランナー同梱版ではなく `jobs/shellcheck.sh` で最新版を導入し、手元と同じ版で検査する（「ローカルで赤・CI で緑」を防ぐ） |
 | vendor/bash-concurrent の追従 | ⚙️ 手動 | Dependabot 対象外。`vendor/update.sh`（sha256 ピン）で更新する |
 
 ## vendor の更新

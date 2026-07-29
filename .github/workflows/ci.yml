@@ -13,12 +13,32 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      # 供給網対策としてタグではなく commit SHA で固定する（タグ付け替えを防ぐ）。
+      # 版の更新は Dependabot が PR で運ぶ（.github/dependabot.yml）。
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: bash syntax check
         run: bash -n bin/booch install.sh lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
 
-      # shellcheck は ubuntu-latest ランナーにプリインストールされている。
+      # ubuntu-latest プリインストールの shellcheck はランナーイメージ次第で古く、手元
+      # （jobs/shellcheck.sh 導入の最新版）とズレて「ローカルで赤・CI で緑」が起きる。
+      # booch 自身のジョブで最新版を入れて版を揃える（jobs/shellcheck.sh の実地検証も兼ねる）。
+      - name: install shellcheck (booch 自身のジョブで最新版を導入)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export BOOCH_ROOT="$PWD"
+          source lib/arch.sh
+          source lib/github.sh
+          source jobs/shellcheck.sh
+          # api.github.com の未認証レート制限は Actions の共有 IP で枯渇しやすい。
+          # seam を差し替えて GITHUB_TOKEN を付ける（booch 本体は無認証のまま）。
+          booch_github_api() { curl -fsSL --max-time 15 -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/$1"; }
+          tag=$(booch_shellcheck_latest)
+          booch_shellcheck_install "$tag" "$(booch_shellcheck_arch)"
+          shellcheck --version
+
       - name: shellcheck
         run: shellcheck -x bin/booch install.sh lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
 

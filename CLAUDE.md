@@ -164,11 +164,18 @@ GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに�
 のセキュリティ施策」、報告手順は SECURITY.md）。拡張時の留意点だけ記す。
 
 - **ShellCheck がゲート兼 Code scanning ソース**。`ci.yml` の `shellcheck -x`（全ファイル）が
-  失敗ゲート、`security.yml`（`differential-shellcheck`）が同じ ShellCheck 結果を SARIF で
+  失敗ゲート、`security.yml`（`differential-shellcheck`）が ShellCheck の結果を SARIF で
   Security タブへ上げる。新しい `.sh` を足せば追加設定なしで両方に乗る。指摘は disable で
-  握り潰さず原則直す。
-- **ワークフローの actions は Dependabot が追従する**（`.github/dependabot.yml`、
-  github-actions エコシステム）。新しいワークフローを足しても同じ設定で追従対象になる。
+  握り潰さず原則直す（間接呼び出しのスタブに出る SC2317 / SC2329 のような偽陽性だけ、理由を
+  書いてファイル単位で抑制する）。
+- **ShellCheck の版は手元と CI で揃える**。ランナー同梱版はイメージの版に張り付くため、
+  `ci.yml` は `jobs/shellcheck.sh` で最新版を導入してから検査する（`security.yml` の
+  differential-shellcheck はコンテナ同梱の shellcheck を使う）。版がズレると「ローカルで赤・
+  CI で緑」が起きるので、新しい検査が増えて手元が赤くなったら直す方を選ぶ。
+- **ワークフローの actions は commit SHA でピンし、Dependabot が追従する**
+  （`.github/dependabot.yml`、github-actions エコシステム）。`uses:` は可動タグ（`@v5`）ではなく
+  `@<sha> # vX.Y.Z` の形で書く。可動タグだと中身が黙って動いて PR が出ないため、パッチ更新も
+  差分としてレビューできるようにする。新しいワークフローを足しても同じ設定で追従対象になる。
   `vendor/bash-concurrent` は Dependabot 対象外で `vendor/update.sh`（sha256 ピン）で更新する。
 - **CodeQL は使わない**（Bash 非対応）。Code scanning は上記 ShellCheck → SARIF で代替する。
 

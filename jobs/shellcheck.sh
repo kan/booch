@@ -2,9 +2,12 @@
 # booch 提供ジョブ: ShellCheck の導入 / 更新（非対話）。
 #
 # GitHub Releases の静的バイナリ（tar.xz にネストした shellcheck）を /usr/local/bin/shellcheck へ
-# 配置する。Ubuntu の apt 版は各リリースの版に張り付き（例: 24.04 は 0.9.0 固定で SC2329 等の
-# 新しい検査が入らない）、CI が使う新しめの shellcheck とローカルがずれるため、GitHub Releases から
-# 直接最新を取得して版を揃える。x86_64 / aarch64 対応。
+# 配置する。Ubuntu の apt 版・GitHub Actions ランナーのプリインストール版はいずれもイメージの
+# 版に張り付き（例: 24.04 の apt は 0.9.0 固定で SC2329 等の新しい検査が入らない）、環境ごとに
+# 検査結果がずれるため、GitHub Releases から直接最新を取得して版を揃える。x86_64 / aarch64 対応。
+#
+# booch 自身の CI（.github/workflows/ci.yml）もこのジョブで shellcheck を導入し、ローカルと
+# 同じ版で検査する。
 #
 # 使い方:
 #   source "$BOOCH_ROOT/lib/arch.sh"

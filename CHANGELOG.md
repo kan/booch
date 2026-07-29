@@ -5,6 +5,27 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Changed
+
+- CI（`.github/workflows/ci.yml`）の ShellCheck を、ランナー同梱版から `jobs/shellcheck.sh`
+  による最新版導入に切り替えた。同梱版はランナーイメージの版に張り付くため手元とズレ、
+  「ローカルで赤・CI で緑」が起きていた（手元の 0.11.0 で `tests/delta_test.sh` の SC2329 が
+  出る一方、CI は緑）。booch 自身のジョブを CI で使うため、`jobs/shellcheck.sh` の実地検証も
+  兼ねる。検査コマンド（`shellcheck -x` のグロブ）は変更していない。
+
+### Fixed
+
+- `tests/delta_test.sh`: ShellCheck 0.11.0 で追加された SC2329（未呼び出し関数）が、
+  `job_delta` から間接的に呼ばれるスタブに対して出ていたのを、既存の SC2317 抑制と同じ枠で
+  理由付きで抑制した。
+
+### Security
+
+- ワークフローの `uses:` を可動タグから commit SHA ピンへ変更した（`actions/checkout` /
+  `redhat-plumbers-in-action/differential-shellcheck`）。タグ付け替えを防ぐとともに、
+  可動タグでは PR が出なかったパッチ更新（differential-shellcheck 同梱の shellcheck を含む）が
+  Dependabot の PR として可視化される。
+
 ## [1.8.0] - 2026-07-29
 
 ### Added

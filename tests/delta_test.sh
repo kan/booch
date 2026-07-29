@@ -4,8 +4,9 @@
 # dpkg() を上書きするのは booch_delta_arch（bare dpkg）の検証のため。delta.sh 内の
 # `sudo dpkg` には効かないが、テストでは booch_delta_install をスタブするので実行
 # されない。SC2032（sudo 経由では関数が使われない）は本テストでは無害なので抑制する。
-# スタブ（seam/dpkg/sudo）は間接呼び出しで SC2317（到達不能）に見えるため併せて抑制する。
-# shellcheck disable=SC2032,SC2317
+# スタブ（seam/dpkg/sudo）は job_delta から間接的に呼ばれるため、静的には SC2317（到達不能）
+# / SC2329（未呼び出し）に見える。いずれも本テストでは偽陽性なので併せて抑制する。
+# shellcheck disable=SC2032,SC2317,SC2329
 
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"

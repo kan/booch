@@ -19,15 +19,19 @@ jobs:
     name: ShellCheck (SARIF -> Code scanning)
     runs-on: ubuntu-latest
     steps:
+      # 供給網対策としてタグではなく commit SHA で固定する（タグ付け替えを防ぐ）。
+      # 版の更新は Dependabot が PR で運ぶ（.github/dependabot.yml）。
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       # push ではフル、pull_request では差分をスキャンし、SARIF を Code scanning へ
       # アップロードする。external-sources は既定 true（ci.yml の `-x` と整合）。
+      # SHA 固定により、同梱 shellcheck の版更新も Dependabot の PR として可視化される
+      # （@v5 の可動タグ参照だと版が黙って動き、PR が出ない）。
       - name: Differential ShellCheck
-        uses: redhat-plumbers-in-action/differential-shellcheck@v5
+        uses: redhat-plumbers-in-action/differential-shellcheck@d965e66ec0b3b2f821f75c8eff9b12442d9a7d1e # v5.5.6
         with:
           severity: style
           token: ${{ secrets.GITHUB_TOKEN }}
