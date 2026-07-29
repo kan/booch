@@ -98,11 +98,20 @@ test_docker_prune_deep_accepted_runs_prunes() {
 test_docker_prune_deep_reports_reclaimable() {
   command() { case "$2" in docker) return 0 ;; *) builtin command "$@" ;; esac; }
   docker() { case "$1" in info) return 0 ;; *) echo "docker $*" ;; esac; }
-  booch_cleanup_docker_df_field() { case "$2" in reclaimable) echo "44.11GB (69%)" ;; size) echo "41.51GB" ;; esac; }
+  # 継ぎ目は行まとめ側（df_field も prune_deep もここを通る）。呼び出し回数も数え、
+  # 2 セル引くのに docker system df の集計を 2 回走らせないことを固定する。
+  # 呼び出し回数はコマンド置換のサブシェルを跨ぐのでファイルで数える。
+  local cnt; cnt=$(mktemp)
+  booch_cleanup_docker_df_rows() {
+    echo x >> "$cnt"
+    printf 'Images|52.30GB|44.11GB (69%%)\nBuild Cache|41.51GB|41.51GB (100%%)\n'
+  }
   booch_confirm_yes_no() { return 1; }
   local out; out=$(booch_cleanup_docker_prune_deep false)
   assert_contains "$out" "44.11GB"
   assert_contains "$out" "41.51GB"
+  assert_eq "1" "$(wc -l < "$cnt")"
+  rm -f "$cnt"
 }
 
 # --- booch_cleanup_worktree_prune ---

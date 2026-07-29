@@ -5,8 +5,20 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-07-29
+
+### Added
+
+- `booch_cleanup_docker_df_rows`（`lib/cleanup.sh`）: `docker system df` の全行を
+  `Type|Size|Reclaimable` で返す。複数のセルが要るときに df を何度も叩かないための入口で、
+  テストの継ぎ目でもある（`booch_cleanup_docker_df_field` もこれを通る）。
+
 ### Changed
 
+- `booch_cleanup_docker_prune_deep` の見込み表示（未使用イメージ / ビルドキャッシュ）が
+  `docker system df` を 2 回実行していたのを 1 回にした。df の集計はイメージ・キャッシュが
+  多いほど重いので、**deep prune が要る環境ほど**（実測でイメージ 44GB / キャッシュ 41GB 規模）
+  確認プロンプトが出るまでの待ちが倍になっていた。1 セルだけ引くときの挙動は変わらない。
 - CI（`.github/workflows/ci.yml`）の ShellCheck を、ランナー同梱版から `jobs/shellcheck.sh`
   による最新版導入に切り替えた。同梱版はランナーイメージの版に張り付くため手元とズレ、
   「ローカルで赤・CI で緑」が起きていた（手元の 0.11.0 で `tests/delta_test.sh` の SC2329 が
@@ -265,6 +277,7 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
 [Unreleased]: https://github.com/kan/booch/compare/v1.8.0...HEAD
+[1.9.0]: https://github.com/kan/booch/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/kan/booch/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/kan/booch/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/kan/booch/compare/v1.6.0...v1.7.0

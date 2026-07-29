@@ -82,17 +82,25 @@ booch_cleanup_docker_prune_safe() { # [excluded_networks_regex] [with_builder]
   echo "  hint: unused tagged images -> 'docker image prune -af'; unused volumes (DBs! careful) -> 'docker volume prune -f'"
 }
 
+# docker system df の全行を "Type|Size|Reclaimable" で返す。取得できなければ空。
+# テストの継ぎ目でもある。df の集計はイメージ・キャッシュが多いほど重い（数十 GB 規模で
+# 数秒〜）ので、セルが 2 つ以上要るときは df_field を並べず これを 1 回呼んで切り出す。
+booch_cleanup_docker_df_rows() {
+  docker system df --format '{{.Type}}|{{.Size}}|{{.Reclaimable}}' 2>/dev/null
+}
+
 # docker system df の 1 セルを返す（type は Images / Containers / "Local Volumes" /
-# "Build Cache"、field は size / reclaimable）。取得できなければ空。テストの継ぎ目でもある。
+# "Build Cache"、field は size / reclaimable）。取得できなければ空。
+# 1 セルにつき df を 1 回叩くので、複数セルが要る場合は booch_cleanup_docker_df_rows を使う。
 booch_cleanup_docker_df_field() { # type field
-  local type=$1 field=$2 fmt
+  local type=$1 field=$2 col
   case "$field" in
-    size)        fmt='{{.Size}}' ;;
-    reclaimable) fmt='{{.Reclaimable}}' ;;
+    size)        col=2 ;;
+    reclaimable) col=3 ;;
     *) return 0 ;;
   esac
-  docker system df --format "{{.Type}}|$fmt" 2>/dev/null \
-    | awk -F'|' -v t="$type" '$1 == t { print $2; exit }'
+  booch_cleanup_docker_df_rows \
+    | awk -F'|' -v t="$type" -v c="$col" '$1 == t { print $c; exit }'
 }
 
 # docker の深い prune（未使用タグ付きイメージ + ビルドキャッシュ全体）。安全版
@@ -106,9 +114,12 @@ booch_cleanup_docker_prune_deep() { # [assume_yes]
     echo "  (docker unavailable, skip)"
     return 0
   fi
-  local img_rec cache_size
-  img_rec=$(booch_cleanup_docker_df_field "Images" reclaimable)
-  cache_size=$(booch_cleanup_docker_df_field "Build Cache" size)
+  # 見込み表示に 2 セル要る。df_field を 2 回呼ぶと重い集計が 2 回走る（deep prune が要る
+  # ＝イメージ・キャッシュが肥大した環境ほど遅くなる）ので、1 回取って切り出す。
+  local df_rows img_rec cache_size
+  df_rows=$(booch_cleanup_docker_df_rows)
+  img_rec=$(printf '%s\n' "$df_rows" | awk -F'|' '$1 == "Images" { print $3; exit }')
+  cache_size=$(printf '%s\n' "$df_rows" | awk -F'|' '$1 == "Build Cache" { print $2; exit }')
   printf '  回収見込み: 未使用イメージ %s / ビルドキャッシュ %s\n' \
     "${img_rec:-unknown}" "${cache_size:-unknown}"
   if ! booch_confirm_yes_no "  未使用タグ付きイメージとビルドキャッシュを削除しますか?" "$assume_yes"; then
