@@ -5,6 +5,18 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-08-03
+
+### Changed
+
+- `booch_npm_local_install`（`lib/npm.sh`）が、src に `package-lock.json` が無いときは
+  `npm install` に続けて `npm update` も走らせるようにした。dest に残る lockfile は初回
+  install の副産物だが、`npm install` は**それが package.json のレンジを満たす限り古い版を
+  保持する**ため、レンジ内に新版が出ても再実行で永久に前進しなかった（dotfiles の textlint が
+  `^15.7.1` のまま 15.8.0 へ上がらず、doctor が毎回「更新あり」を出し続けた）。src に lockfile が
+  **ある**ときは意図された版固定とみなし従来どおり install のみ（update しない）。レンジ外
+  （メジャー跨ぎ）は動かないので、`package.json` の手 bump が要る点は変わらない。
+
 ## [1.9.0] - 2026-07-29
 
 ### Added
@@ -276,7 +288,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/kan/booch/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/kan/booch/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/kan/booch/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/kan/booch/compare/v1.7.0...v1.7.1

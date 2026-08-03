@@ -33,6 +33,8 @@ test_npm_local_install_copies_manifest_and_installs() {
   assert_eq "installed-pkg" "$([ -f "$dest/package.json" ] && echo installed-pkg)" "package.json をコピー"
   assert_eq "installed-lock" "$([ -f "$dest/package-lock.json" ] && echo installed-lock)" "lock をコピー"
   assert_contains "$cap" "install --no-audit --no-fund"
+  # src の lockfile は意図された版固定なので update で動かさない。
+  assert_not_contains "$cap" "update" "src に lock があれば update しない"
   rm -rf "$src" "$dest" "$capfile"
 }
 
@@ -45,6 +47,32 @@ test_npm_local_install_without_lock() {
   assert_status 0 "$rc"
   assert_file_absent "$dest/package-lock.json"
   rm -rf "$src" "$dest"
+}
+
+# src に lockfile が無い＝版固定の意図が無いので、install だけだと dest に残る lockfile が
+# レンジ内の新版を塞ぐ。update まで走らせてレンジ内最新へ追従させる。
+test_npm_local_install_updates_when_src_has_no_lock() {
+  local src; src=$(mktemp -d)
+  local dest; dest=$(mktemp -d)
+  printf '{"name":"x"}' > "$src/package.json"
+  local capfile; capfile=$(mktemp)
+  booch_npm_run() { echo "$*" >> "$capfile"; }
+  booch_npm_local_install "$src" "$dest"
+  local cap; cap=$(cat "$capfile")
+  assert_contains "$cap" "install --no-audit --no-fund"
+  assert_contains "$cap" "update --no-audit --no-fund"
+  rm -rf "$src" "$dest" "$capfile"
+}
+
+# update の失敗も握り潰さず rc に伝える（install 側と同じ扱い）。
+test_npm_local_install_propagates_update_failure() {
+  local src; src=$(mktemp -d)
+  local dest; dest=$(mktemp -d)
+  printf '{"name":"x"}' > "$src/package.json"
+  booch_npm_run() { case "$1" in update) return 1 ;; *) return 0 ;; esac; }
+  local rc; if booch_npm_local_install "$src" "$dest"; then rc=0; else rc=$?; fi
+  rm -rf "$src" "$dest"
+  assert_status 1 "$rc"
 }
 
 # npm install の失敗が関数の rc に伝播する（サブシェル最後の文の rc）。

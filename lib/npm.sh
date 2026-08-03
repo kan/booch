@@ -17,6 +17,10 @@
 # registry や厳密なロック固定が要る用途は対象外。booch_npm_present は内部では使わない
 # （npm の有無確認は利用側の責務。seam として公開する）。
 #
+# 版の追従は src の package-lock.json の有無で決まる（booch_npm_local_install 参照）:
+#   src に lock あり → その固定どおり（install のみ）
+#   src に lock なし → package.json のレンジ内で最新へ追従（install 後に update）
+#
 # 依存: npm。
 #
 # テスト用の継ぎ目（seam）:
@@ -33,6 +37,13 @@ booch_npm_run() { npm "$@"; }
 
 # src の npm プロジェクト（package.json と、あれば package-lock.json）を dest へ同期し、
 # dest で install する。固有の設定ファイルは利用側がこの後で配置する。
+#
+# src が package-lock.json を持たないときは install に続けて update も走らせる。dest の
+# lockfile は初回 install の副産物として残るが、`npm install` は**それがレンジを満たす限り
+# 古い版を保持する**ため、package.json のレンジ内に新版が出ても永久に前進しなくなる
+# （dotfiles の textlint が ^15.7.1 のまま 15.8.0 へ上がらなかった実例）。src に lockfile が
+# 無い＝版を固定する意図が無いので、update でレンジ内最新へ追従させる。レンジ外（メジャー
+# 跨ぎ）は動かないので、package.json の手 bump が要る点は変わらない。
 booch_npm_local_install() { # src_dir dest_dir
   local src=$1 dest=$2
   if [ ! -f "$src/package.json" ]; then
@@ -41,12 +52,19 @@ booch_npm_local_install() { # src_dir dest_dir
   fi
   mkdir -p "$dest" || return 1
   cp "$src/package.json" "$dest/" || return 1
+  # src の lockfile は「意図された版固定」の signal。あるときは尊重して update しない。
+  local pinned=""
   if [ -f "$src/package-lock.json" ]; then
     cp "$src/package-lock.json" "$dest/" || return 1
+    pinned=1
   fi
   # cwd を汚さず dest で install するためサブシェルで cd。サブシェルが関数最後の文
-  # なので、その rc（install の成否）がそのまま関数の戻り値になる。
-  ( cd "$dest" && booch_npm_run install --no-audit --no-fund )
+  # なので、その rc（install / update の成否）がそのまま関数の戻り値になる。
+  (
+    cd "$dest" || exit 1
+    booch_npm_run install --no-audit --no-fund || exit
+    [ -n "$pinned" ] || booch_npm_run update --no-audit --no-fund
+  )
 }
 
 # ユーザー prefix へグローバル install / 更新する（sudo 不要）。グローバルの安価な
