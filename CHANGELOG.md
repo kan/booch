@@ -5,6 +5,35 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-08-17
+
+### Added
+
+- `booch_wsl_interop_conf`（`lib/wsl.sh`）: WSLInterop の binfmt.d 永続設定の実在パスを返す
+  （`/usr/lib/binfmt.d` → `/etc/binfmt.d` の順。どちらも無ければ既定パスを返して非 0）。
+  不在時も空にしないので、案内文が「どこへ書くか」を常に示せる。既定パスは
+  `BOOCH_WSL_INTEROP_CONF` で上書きできる（テスト用の継ぎ目）。
+- `booch_wsl_binfmt_unit_state`（`lib/wsl.sh`）: `systemd-binfmt.service` の状態を
+  `masked` / `present` / `none`（systemctl 無し）で返す。
+
+### Changed
+
+- `booch_wsl_doctor_interop`（`lib/wsl.sh`）が `systemd-binfmt unit` の行を追加し、
+  masked なら warn を出して `unmask` を案内するようにした。masked だと **binfmt.d の再適用も、
+  WSL が drop-in で仕込む WSLInterop の再登録も走らない**ため、いちど登録が消えると戻る経路が
+  無くなる。この状態は登録が生きている間は無症状で、`.exe` が動かなくなって初めて表面化する。
+
+### Fixed
+
+- `booch_wsl_doctor_interop` が「永続設定はあるのに binfmt_misc の登録だけ消えた」ケースで、
+  `WSLInterop disabled` とだけ表示して復旧方法を出していなかったのを、即時復旧コマンドを
+  添えるようにした。案内ブロックは `persistence config` が warn のときにしか出ておらず、
+  実際に起きるのはこちら（永続設定は残ったまま登録だけ落ちる）なので、警告を見ても手が
+  出せなかった。
+- 復旧の案内を `systemctl restart systemd-binfmt` から binfmt_misc の `register` への直接
+  書き込みへ変更した。前者は `systemd-binfmt.service` が masked のとき**エラーも出さずに
+  何もしない**ため、案内どおり実行しても直らない。register への書き込みは masked でも効く。
+
 ## [1.10.0] - 2026-08-03
 
 ### Changed
@@ -288,7 +317,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/kan/booch/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/kan/booch/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/kan/booch/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/kan/booch/compare/v1.7.1...v1.8.0
