@@ -249,6 +249,25 @@ test_claude_plugin_ensure_outputs_installed() {
   assert_eq "$(printf 'installed\t\t2.0.0')" "$out"
 }
 
+# 回帰ガード: install が進捗を stdout に書いても outcome 行に混ざらない（stderr へ寄せる）。
+# 混ざると status が進捗表示ごと取り込まれ、呼び出し側のサマリー行が壊れる（新規 install のみ）。
+test_claude_plugin_ensure_installed_outcome_excludes_install_output() {
+  local sf; sf=$(mktemp); : > "$sf"
+  booch_claude_run() {
+    case "$*" in
+      "plugin list")
+        if [ -s "$sf" ]; then printf '  ❯ acme-tools@acme\n    Version: %s\n' "$(cat "$sf")"
+        else printf '  ❯ other@x\n'; fi ;;
+      "plugin install acme-tools@acme")
+        printf 'Installing plugin "acme-tools@acme"...done\n'   # CLI の進捗表示（stdout）
+        printf '2.0.0' > "$sf" ;;
+    esac
+  }
+  local out; out=$(booch_claude_plugin_ensure acme-tools@acme 2>/dev/null)
+  rm -f "$sf"
+  assert_eq "$(printf 'installed\t\t2.0.0')" "$out"
+}
+
 # 導入済みで版が変われば "updated\t<old>\t<new>"（update が状態ファイルの版を上げる）。
 test_claude_plugin_ensure_outputs_updated() {
   local sf; sf=$(mktemp); printf '1.0.0' > "$sf"

@@ -5,6 +5,18 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-08-31
+
+### Fixed
+
+- `booch_claude_plugin_ensure`（`lib/claude.sh`）が `claude plugin install` の出力を stdout へ
+  流したままにしていたのを、stderr へ寄せるようにした。この関数の stdout は
+  `"<status>\t<old>\t<new>"` の outcome 行だけという契約なので、install の進捗表示が混ざると
+  呼び出し側の `out=$(booch_claude_plugin_ensure ...)` がそれごと取り込み、status が進捗表示に
+  化けてサマリー行が壊れていた。**新規 install のときだけ**起きる（update は元から
+  `>/dev/null`）ので、既に導入済みの環境では表面化しない。本体側の `booch_claude_ensure` は
+  導入出力を `>&2` に寄せてあり、その非対称も解消した。回帰ガードのテストを追加。
+
 ## [1.11.0] - 2026-08-17
 
 ### Added
@@ -317,7 +329,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.11.1...HEAD
+[1.11.1]: https://github.com/kan/booch/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/kan/booch/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/kan/booch/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/kan/booch/compare/v1.8.0...v1.9.0

@@ -133,6 +133,10 @@ booch_claude_plugin_version() { # plugin@source
 # （status= installed|updated|current）で返し、呼び出し側が booch_result を書けるようにする。
 # install 失敗は従来どおり非 0 を返す（出力は出さない）。update 失敗は許容し、版が変わら
 # なければ current として報告する。
+# **導入コマンドの出力は stderr へ寄せる**（booch_claude_ensure と同じ規約）。stdout は
+# outcome 行だけの契約なので、install の進捗表示が混ざると呼び出し側の
+# `out=$(booch_claude_plugin_ensure ...)` がそれごと取り込み、status に化けてサマリー行が
+# 壊れる（新規 install のときだけ起きる。update は元から >/dev/null）。ログには stderr で残る。
 booch_claude_plugin_ensure() { # plugin@source -> "<status>\t<old>\t<new>"
   local plugin=$1 old new status
   if booch_claude_plugin_installed "$plugin"; then
@@ -142,7 +146,7 @@ booch_claude_plugin_ensure() { # plugin@source -> "<status>\t<old>\t<new>"
     if [ "$old" = "$new" ]; then status=current; else status=updated; fi
   else
     old=""
-    booch_claude_run plugin install "$plugin" || return 1
+    booch_claude_run plugin install "$plugin" >&2 || return 1
     new=$(booch_claude_plugin_version "$plugin")
     status=installed
   fi
