@@ -24,6 +24,20 @@ _j_result_ver() {
   booch_result_ver "ver-up"   "1.0.0" "1.1.0"
   booch_result_ver "ver-same" "2.0.0" "2.0.0"
 }
+# ジョブ全体は成功のまま、内訳の 1 件だけを failed として理由付きで報告する
+# （marketplace 1 個の更新失敗でジョブごと落とさない、という利用側のパターン）。
+_j_part_failed() {
+  booch_result "part-ok" current "1.0.0"
+  booch_result_failed "part-ng" "更新できません: acme"
+}
+_j_failed_noreason() { booch_result "part-z" failed; }
+# 区切り文字と改行を含む理由。サマリー行が壊れないこと（潰されること）を見る。
+_j_dirty_reason() { booch_result_failed "part-d" $'壊れた|理由\n2 行目'; }
+# 理由付き failed 行が、同じジョブの版付き行の表示を壊さないこと。
+_j_ver_and_reason() {
+  booch_result "ver-keep" updated "1.0.0" "1.1.0"
+  booch_result_failed "ver-ng" "理由だけ"
+}
 
 test_summary_renders_all_statuses() {
   booch_runner_init
@@ -49,6 +63,47 @@ test_result_ver_maps_versions_to_status() {
   assert_contains "$out" "installed  1.0.0"
   assert_contains "$out" "updated    1.0.0 → 1.1.0"
   assert_contains "$out" "latest     2.0.0"
+}
+
+# ジョブが自分で書く failed 行は理由を伴える（ジョブ自体は成功のまま内訳だけ落とす用途）。
+# 理由が出ないと「何が失敗したか」がサマリーから分からず、ジョブが成功扱いのため
+# bash-concurrent のログ表示にも載らない（＝失敗が完全に見えなくなる）。
+test_failed_result_shows_reason() {
+  booch_runner_init
+  booch_job p "part" _j_part_failed 60
+  local out
+  out=$(booch_run)
+  assert_contains "$out" "part-ok"
+  assert_contains "$out" "failed     更新できません: acme"
+}
+
+# 理由なしの呼び出し（従来の 2 引数。_booch_exec が書く行も同じ）は余計な余白を足さない。
+test_failed_result_without_reason_has_no_trailing_space() {
+  booch_runner_init
+  booch_job z "noreason" _j_failed_noreason 60
+  local out
+  out=$(booch_run)
+  assert_contains "$out" "part-z"
+  assert_not_contains "$out" "failed  "
+}
+
+# 理由付き failed 行を混ぜても、版を持つ行の表示は変わらない。
+test_reason_does_not_disturb_version_rows() {
+  booch_runner_init
+  booch_job vr "verreason" _j_ver_and_reason 60
+  local out
+  out=$(booch_run)
+  assert_contains "$out" "updated    1.0.0 → 1.1.0"
+  assert_contains "$out" "failed     理由だけ"
+}
+
+# 理由に区切り文字（|）や改行が混ざってもサマリー行は 1 行のまま壊れない。
+test_failed_result_reason_is_sanitized() {
+  booch_runner_init
+  booch_job d "dirty" _j_dirty_reason 60
+  local out
+  out=$(booch_run)
+  assert_contains "$out" "failed     壊れた 理由 2 行目"
 }
 
 # 非 0 終了したジョブは自身では failed 行を書けない。_booch_exec が補う。

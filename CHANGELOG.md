@@ -5,6 +5,39 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-04
+
+### Added
+
+- `booch_claude_marketplace_update`（`lib/claude.sh`）: marketplace を 1 つだけ更新する。
+  `booch_claude_marketplace_update_all` は 1 つでも壊れていれば非 0 になるが内訳が分からない
+  ため、「どの marketplace が失敗したか」を報告したい利用側はこちらを名前ごとに呼ぶ
+  （正常時は update_all を 1 回、非 0 のときだけ名前ごとに切り分ける使い方を想定）。
+- `booch_result_failed <tool> [reason]`（`lib/runner.sh`）: 理由付きの `failed` 行を書く
+  ジョブ向けの入口。ジョブ全体は成功のまま内訳の 1 件だけを落とす使い方では
+  bash-concurrent の失敗ログが出ないため、理由を書ける場所がサマリー以外に無かった。
+  サマリーは `failed` 行の後ろに理由を表示する（理由なしの行は従来どおりの見た目）。
+
+### Changed
+
+- marketplace 系ヘルパー（`ensure` / `update` / `update_all`）の失敗の返し方を
+  `booch_claude_plugin_ensure` と同じ「動作＝ヘルパー / 報告＝ジョブ」の契約へ揃えた。
+  **成功なら無出力で 0、失敗なら理由 1 行を stdout に出して非 0** を返し、CLI の全文は
+  stderr へ流してジョブのログに残す。利用側は
+  `if ! reason=$(booch_claude_marketplace_update "$m"); then booch_result_failed ... "$reason"; fi`
+  と書ける。従来 `update_all` は出力を `>/dev/null 2>&1` で捨てており、「1 marketplace
+  could not be refreshed: \<name\>」のような失敗理由が消えて、marketplace が参照できなく
+  なったことに気付けないままプラグインが古い版で凍結する事故を招いていた。
+  理由の 1 行化（空白潰し・進捗断片の除去・長さの切り詰め）は CLI の出力書式に依存する処理
+  なので、利用側ではなく `lib/claude.sh` が持つ。
+
+### Fixed
+
+- `booch_result` が値に含まれる `|` と改行をそのまま書いていたため、サマリーの読み出し
+  （`IFS='|' read -r`）が別フィールド・別行として解釈して行が壊れていた。ブラケット表現の
+  1 回の展開で空白へ潰すようにした（CLI の出力をそのまま失敗理由に渡せるようにするため。
+  コマンド置換を使うと 1 行あたり数回の fork になり、サマリー数十行ぶんが無駄になる）。
+
 ## [1.11.1] - 2026-08-31
 
 ### Fixed
@@ -329,7 +362,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/kan/booch/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/kan/booch/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/kan/booch/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/kan/booch/compare/v1.9.0...v1.10.0

@@ -20,6 +20,7 @@
 #   booch_status "downloading..."          # 実行中の 1 行ステータスを更新（fd 3）
 #   booch_result "Go" updated 1.22 1.23     # サマリー 1 行を記録
 #     status: installed | updated | current | migrated | failed
+#   booch_result_failed "mkt:acme" "更新失敗: ..."   # 理由付きの failed 行
 #
 # 要件: bash >= 4.2, GNU coreutils（readlink -f, timeout --foreground --kill-after,
 #       mktemp -d）, および bash-concurrent の要件
@@ -123,10 +124,28 @@ booch_status() {
 
 # サマリーに 1 行追加する（ジョブ関数内から呼ぶ）。
 # 同一ジョブ内の複数回呼び出しは登録順に保たれる（同じファイルへ追記）。
+# status=failed のときだけ第 3 列は版ではなく「失敗理由」を表す。呼ぶ側がこの使い分けを
+# 意識せずに済むよう、failed は booch_result_failed から書く（直接 booch_result を
+# failed で呼んでもよいが、そのときは第 3 引数が理由になる）。
+#
+# 区切り文字（|）と改行が値に混ざると、サマリーの読み出し（IFS='|' read -r）が別フィールド・
+# 別行として解釈して行が壊れる。ブラケット表現の 1 回の展開でまとめて空白へ潰し、CLI の
+# 出力をそのまま理由に渡せるようにする。**ここでコマンド置換を挟まないこと** ——
+# サマリー行は 1 回の実行で数十行書かれるので、値を返すためだけの fork が積み上がる。
 booch_result() {
   local tool=$1 status=$2 old_ver=${3:-} new_ver=${4:-}
-  printf '%s|%s|%s|%s\n' "$tool" "$status" "$old_ver" "$new_ver" \
+  printf '%s|%s|%s|%s\n' \
+    "${tool//[$'\n\r|']/ }" "${status//[$'\n\r|']/ }" \
+    "${old_ver//[$'\n\r|']/ }" "${new_ver//[$'\n\r|']/ }" \
     >> "$BOOCH_RESULT_DIR/${BOOCH_JOB:-_}.result"
+}
+
+# failed 行を理由付きで記録する（ジョブ向けの専用入口）。
+# ジョブ全体は成功のまま内訳の 1 件だけを落とす使い方（marketplace 1 個の更新失敗など）では、
+# bash-concurrent の失敗ログが出ないため、理由を書ける場所がサマリー以外に無い。
+# 理由は省略可（従来どおり理由なしの failed 行になる）。
+booch_result_failed() { # tool [reason]
+  booch_result "$1" failed "${2:-}"
 }
 
 # 版を比較して installed / updated / current を記録する、ジョブ向けの共通分岐。jobs/ の
@@ -286,8 +305,11 @@ _booch_print_summary() {
           printf '  %s⇄%s %-25s %smigrated%s   %s → %s\n' \
             "$_BOOCH_COLOR_CYAN" "$_BOOCH_COLOR_RESET" "$tool" "$_BOOCH_COLOR_CYAN" "$_BOOCH_COLOR_RESET" "$old_ver" "$new_ver" ;;
         failed)
-          printf '  %s✗%s %-25s %sfailed%s\n' \
-            "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" "$tool" "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" ;;
+          # failed の第 3 列は版ではなく理由（booch_result_failed が入れる）。理由なしの
+          # 行（_booch_exec が書くもの）では空なので、そのときは余白ごと付けない。
+          printf '  %s✗%s %-25s %sfailed%s%s\n' \
+            "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" "$tool" \
+            "$_BOOCH_COLOR_RED" "$_BOOCH_COLOR_RESET" "${old_ver:+     $old_ver}" ;;
       esac
     done < "$f"
   done

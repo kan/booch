@@ -128,45 +128,109 @@ test_claude_bin_is_exported() {
 }
 
 # --- marketplace ---
+# marketplace 系は実処理を _booch_claude_run_reported（コマンド置換で出力を捕まえる）に
+# 通すため、stub の引数記録は**変数ではなくファイル**へ書く（サブシェルでの代入は親へ
+# 戻らない）。以降の marketplace テストは $CAP_FILE を使う。
+_mkt_cap_file() { CAP_FILE=$(mktemp); }
+_mkt_cap() { printf '%s' "$*" > "$CAP_FILE"; }
+_mkt_captured() { cat "$CAP_FILE"; }
+
 test_claude_marketplace_ensure_skips_when_present() {
-  local cap=""
+  _mkt_cap_file
   booch_claude_run() {
     case "$*" in
       "plugin marketplace list") printf '  ❯ acme\n    Source: GitHub (acme/claude-plugin)\n' ;;
-      *) cap="$*" ;;
+      *) _mkt_cap "$@" ;;
     esac
   }
   booch_claude_marketplace_ensure acme/claude-plugin
-  assert_eq "" "$cap" "登録済みなら add しない"
+  assert_eq "" "$(_mkt_captured)" "登録済みなら add しない"
 }
 test_claude_marketplace_ensure_adds_when_absent() {
-  local cap=""
+  _mkt_cap_file
   booch_claude_run() {
     case "$*" in
       "plugin marketplace list") printf '  ❯ other\n    Source: GitHub (foo/bar)\n' ;;
-      *) cap="$*" ;;
+      *) _mkt_cap "$@" ;;
     esac
   }
   booch_claude_marketplace_ensure acme/claude-plugin
-  assert_eq "plugin marketplace add acme/claude-plugin" "$cap"
+  assert_eq "plugin marketplace add acme/claude-plugin" "$(_mkt_captured)"
 }
 # 部分一致の誤検出ガード: foo/bar は (foo/bar-baz) にマッチせず add する。
 test_claude_marketplace_ensure_adds_when_only_substring_present() {
-  local cap=""
+  _mkt_cap_file
   booch_claude_run() {
     case "$*" in
       "plugin marketplace list") printf '  ❯ baz\n    Source: GitHub (foo/bar-baz)\n' ;;
-      *) cap="$*" ;;
+      *) _mkt_cap "$@" ;;
     esac
   }
   booch_claude_marketplace_ensure foo/bar
-  assert_eq "plugin marketplace add foo/bar" "$cap"
+  assert_eq "plugin marketplace add foo/bar" "$(_mkt_captured)"
 }
 test_claude_marketplace_update_all_invokes_update() {
-  local cap=""
-  booch_claude_run() { cap="$*"; }
+  _mkt_cap_file
+  booch_claude_run() { _mkt_cap "$@"; }
   booch_claude_marketplace_update_all
-  assert_eq "plugin marketplace update" "$cap"
+  assert_eq "plugin marketplace update" "$(_mkt_captured)"
+}
+test_claude_marketplace_update_invokes_update_with_name() {
+  _mkt_cap_file
+  booch_claude_run() { _mkt_cap "$@"; }
+  booch_claude_marketplace_update acme
+  assert_eq "plugin marketplace update acme" "$(_mkt_captured)"
+}
+# 更新失敗（marketplace が消えた等）は rc として呼び出し側へ伝える。握り潰すと
+# 「どの marketplace が壊れているか」を報告できない。
+test_claude_marketplace_update_propagates_failure() {
+  booch_claude_run() { return 1; }
+  local rc=0
+  booch_claude_marketplace_update acme >/dev/null || rc=$?
+  assert_eq 1 "$rc"
+}
+test_claude_marketplace_update_all_propagates_failure() {
+  booch_claude_run() { return 1; }
+  local rc=0
+  booch_claude_marketplace_update_all >/dev/null || rc=$?
+  assert_eq 1 "$rc"
+}
+# 失敗時は理由 1 行を stdout に返し（呼び出し側が booch_result_failed へ渡せる）、
+# 全文は stderr でジョブのログに残す。成功時の stdout は空のまま。
+test_claude_marketplace_update_reports_reason_on_stdout() {
+  booch_claude_run() { echo "Failed to refresh marketplace 'acme': gone"; return 1; }
+  local reason
+  reason=$(booch_claude_marketplace_update acme 2>/dev/null) || true
+  assert_eq "Failed to refresh marketplace 'acme': gone" "$reason"
+}
+test_claude_marketplace_update_keeps_full_output_on_stderr() {
+  booch_claude_run() { echo "1 marketplace could not be refreshed: acme"; return 1; }
+  local err
+  err=$(booch_claude_marketplace_update acme 2>&1 >/dev/null) || true
+  assert_eq "1 marketplace could not be refreshed: acme" "$err"
+}
+test_claude_marketplace_update_silent_on_success() {
+  booch_claude_run() { return 0; }
+  local out
+  out=$(booch_claude_marketplace_update acme 2>/dev/null)
+  assert_eq "" "$out" "成功時は stdout に何も出さない"
+}
+# 進捗と結果を同じ行に吐く claude の書式から、✘ 以降だけを理由として拾う。
+test_claude_reason_strips_progress_prefix() {
+  local r
+  r=$(_booch_claude_reason "Updating marketplace: acme...✘ Failed to update: gone")
+  assert_eq "Failed to update: gone" "$r"
+}
+# マーカーが無い書式でも壊れない（切り詰めだけが効く）。
+test_claude_reason_without_marker_is_collapsed() {
+  local r
+  r=$(_booch_claude_reason $'error: cannot reach\n  the registry')
+  assert_eq "error: cannot reach the registry" "$r"
+}
+test_claude_reason_truncates_to_max() {
+  local r
+  r=$(_booch_claude_reason "aaaaaaaaaa" 4)
+  assert_eq "aaaa…" "$r"
 }
 
 # --- plugin 判定 / バージョン ---

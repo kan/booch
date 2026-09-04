@@ -6,8 +6,9 @@
 # 使い方:
 #   source "$BOOCH_ROOT/lib/claude.sh"
 #   booch_claude_ensure                                 # 本体。outcome を stdout に 1 行返す
-#   booch_claude_marketplace_ensure <owner>/<marketplace>
-#   booch_claude_marketplace_update_all
+#   booch_claude_marketplace_ensure <owner>/<marketplace>   # 失敗時は理由を stdout に 1 行
+#   booch_claude_marketplace_update_all                     #   〃（内訳が要るなら下を名前ごとに）
+#   booch_claude_marketplace_update <marketplace>           #   〃
 #   booch_claude_plugin_ensure <plugin>@<marketplace>   # outcome を stdout に 1 行返す
 #
 # booch_claude_ensure / booch_claude_plugin_ensure は導入結果を stdout にタブ区切り 1 行
@@ -15,6 +16,12 @@
 # これを受けて booch_result を書ける（役割分担: ヘルパー=動作、ジョブ=報告）。例:
 #   IFS=$'\t' read -r status old new < <(booch_claude_plugin_ensure acme-tools@acme)
 #   booch_result "  acme-tools" "$status" "$old" "$new"
+#
+# marketplace 系は同じ役割分担を「失敗の報告」側で行う。**成功なら無出力で 0、失敗なら理由
+# 1 行を stdout に出して非 0**（CLI の全文は stderr でジョブのログに残す）。例:
+#   if ! reason=$(booch_claude_marketplace_update acme); then
+#     booch_result_failed "  mkt:acme" "更新失敗: $reason"
+#   fi
 #
 # 本体の導入だけで報告が要らない場合は booch_claude_install を直接呼んでよい（出力なし）。
 #
@@ -96,20 +103,59 @@ booch_claude_ensure() { # -> "<status>\t<old>\t<new>"
   printf '%s\t%s\t%s\n' "$status" "$old" "$new"
 }
 
+# claude の出力から、サマリーの failed 行に載せる 1 行の理由を作る。CLI の出力書式に
+# 依存する処理なので、利用側（ジョブ）ではなくここに置く（"❯" / "Version:" 行の解析と同じ層）。
+#   - 空白と改行を潰して 1 行にする（結果ファイルは 1 行 1 レコード）
+#   - claude は進捗と結果を同じ行に吐くので、失敗マーカー（✘）以降を本文とみなして前を落とす。
+#     マーカーが無ければ何も削らない（書式が変わっても壊れず、切り詰めだけが効く）
+#   - 長すぎるとサマリーが読めないので max 文字で切る（全文は stderr 経由でログに残る）
+_booch_claude_reason() { # message [max]
+  local msg max=${2:-140}
+  msg=$(printf '%s' "$1" | tr -s '[:space:]' ' ')
+  msg=${msg#*✘ }
+  msg=${msg# }; msg=${msg% }
+  [ "${#msg}" -le "$max" ] || msg="${msg:0:$max}…"
+  printf '%s\n' "$msg"
+}
+
+# claude を実行し、**成功なら無出力で 0、失敗なら理由 1 行を stdout に出して非 0** を返す。
+# 全文は stderr へ流してジョブのログに残す（握り潰さない。>/dev/null で捨てると
+# 「marketplace が参照できない」ことに気付けないままプラグインが古い版で凍結する）。
+# 利用側は `if ! reason=$(...); then booch_result_failed "$label" "$reason"; fi` と書ける
+# ——「動作＝ヘルパー / 報告＝ジョブ」の役割分担（booch_claude_plugin_ensure と同じ）。
+_booch_claude_run_reported() { # claude-args...
+  local out rc=0
+  out=$(booch_claude_run "$@" 2>&1) || rc=$?
+  [ -z "$out" ] || printf '%s\n' "$out" >&2
+  [ "$rc" -eq 0 ] && return 0
+  _booch_claude_reason "$out"
+  return "$rc"
+}
+
 # marketplace を冪等に追加する。list の "Source: GitHub (owner/repo)" に source が
 # 出るので、"(owner/repo)" を括弧ごと固定文字列照合して未登録なら add する
 # （括弧を含めることで foo/bar が (foo/bar-baz) を誤検出しない）。
+# 失敗時は理由 1 行を stdout に出して非 0（_booch_claude_run_reported の契約）。
 booch_claude_marketplace_ensure() { # source (owner/repo)
   local src=$1
   if booch_claude_run plugin marketplace list 2>/dev/null | grep -qF "($src)"; then
     return 0
   fi
-  booch_claude_run plugin marketplace add "$src"
+  _booch_claude_run_reported plugin marketplace add "$src"
 }
 
-# 全 marketplace を最新化する（plugin 更新の前に呼ぶ）。
+# marketplace を 1 つ更新する。**どれが失敗したかを報告したい呼び出し側は、update_all では
+# なくこちらを名前ごとに呼ぶ**（update_all は 1 つでも壊れていれば非 0 になるが、内訳は
+# 呼び出し側から判別できない）。失敗時は理由 1 行を stdout に出して非 0。
+booch_claude_marketplace_update() { # name
+  _booch_claude_run_reported plugin marketplace update "$1"
+}
+
+# 全 marketplace を最新化する（plugin 更新の前に呼ぶ）。失敗時は理由 1 行を stdout に出して
+# 非 0。内訳が要るなら、これが非 0 を返したときだけ booch_claude_marketplace_update を
+# 名前ごとに回す（正常時は claude 1 起動で済む）。
 booch_claude_marketplace_update_all() {
-  booch_claude_run plugin marketplace update >/dev/null 2>&1
+  _booch_claude_run_reported plugin marketplace update
 }
 
 # plugin が導入済みか。list の "❯ <plugin@source>" 行の id を完全一致で判定する
