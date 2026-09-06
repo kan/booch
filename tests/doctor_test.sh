@@ -425,4 +425,96 @@ test_doctor_disk_skips_when_df_fails() {
   assert_eq "0" "$BOOCH_DOCTOR_WARN"   # 取得失敗を警告に化かさない
 }
 
+# --- booch_doctor_apt_keyrings（署名鍵の期限。lib/apt.sh の判定に乗る） ---
+# sources.list.d を temp に差し替え、keyring の期限だけスタブで与える。
+_doctor_make_sources() { # dir "name=keyring-path"...
+  local dir=$1 pair; shift
+  mkdir -p "$dir"
+  for pair in "$@"; do
+    printf 'deb [signed-by=%s] https://example/%s stable main\n' \
+      "${pair#*=}" "${pair%%=*}" > "$dir/${pair%%=*}.list"
+  done
+}
+
+test_doctor_apt_keyrings_warns_on_expired() {
+  booch_doctor_init
+  local d; d=$(mktemp -d)
+  : > "$d/kr"
+  export BOOCH_APT_SOURCES_DIR="$d"
+  _doctor_make_sources "$d" "foo=$d/kr" "bar=$d/kr"
+  booch_apt_key_deadline() { printf '%s' 2000000000; }
+  booch_apt_keyring_expiry() { printf 'expired\n'; }
+  local out; out=$(booch_doctor_apt_keyrings)
+  booch_doctor_apt_keyrings >/dev/null      # 集計は $() の外で見る（副シェルに閉じるため）
+  rm -rf "$d"
+  assert_contains "$out" "[WARN]"
+  assert_contains "$out" "bar foo"          # repo 名を挙げる（glob 順）
+  assert_eq "1" "$BOOCH_DOCTOR_WARN"
+}
+
+# 猶予日数以内に期限が来るものも warn。境界は booch_apt_key_deadline が決める。
+test_doctor_apt_keyrings_warns_within_grace() {
+  booch_doctor_init
+  local d; d=$(mktemp -d)
+  : > "$d/kr"
+  export BOOCH_APT_SOURCES_DIR="$d"
+  _doctor_make_sources "$d" "foo=$d/kr"
+  booch_apt_key_deadline() { printf '%s' 2000000000; }
+  booch_apt_keyring_expiry() { printf '1999999999\n'; }
+  local out; out=$(booch_doctor_apt_keyrings)
+  rm -rf "$d"
+  assert_contains "$out" "[WARN]"
+}
+
+# 全て有効なら ok。最も早く切れる repo とその日付を出す。
+test_doctor_apt_keyrings_reports_soonest() {
+  booch_doctor_init
+  local d; d=$(mktemp -d)
+  : > "$d/early"; : > "$d/late"
+  export BOOCH_APT_SOURCES_DIR="$d"
+  _doctor_make_sources "$d" "foo=$d/early" "bar=$d/late"
+  booch_apt_key_deadline() { printf '%s' 0; }
+  booch_apt_keyring_expiry() {
+    case "$1" in *early) printf '1800000000\n' ;; *) printf 'forever\n' ;; esac
+  }
+  local out; out=$(booch_doctor_apt_keyrings)
+  rm -rf "$d"
+  assert_contains "$out" "[OK]"
+  assert_contains "$out" "(foo)"
+  assert_eq "0" "$BOOCH_DOCTOR_WARN"
+}
+
+# 1 本も判定できなければ skip（緑で「期限なし」と出さない）。
+test_doctor_apt_keyrings_skips_when_all_unreadable() {
+  booch_doctor_init
+  local d; d=$(mktemp -d)
+  : > "$d/kr"
+  export BOOCH_APT_SOURCES_DIR="$d"
+  _doctor_make_sources "$d" "foo=$d/kr"
+  booch_apt_key_deadline() { printf '%s' 0; }
+  booch_apt_keyring_expiry() { printf 'unknown\n'; }
+  local out; out=$(booch_doctor_apt_keyrings)
+  rm -rf "$d"
+  assert_contains "$out" "[SKIP]"
+  assert_eq "0" "$BOOCH_DOCTOR_WARN"
+}
+
+# 一部だけ読めないときは、判定できた分を出したうえで別行に挙げる。
+test_doctor_apt_keyrings_lists_partial_unreadable() {
+  booch_doctor_init
+  local d; d=$(mktemp -d)
+  : > "$d/good"; : > "$d/bad"
+  export BOOCH_APT_SOURCES_DIR="$d"
+  _doctor_make_sources "$d" "foo=$d/good" "bar=$d/bad"
+  booch_apt_key_deadline() { printf '%s' 0; }
+  booch_apt_keyring_expiry() {
+    case "$1" in *bad) printf 'unknown\n' ;; *) printf 'forever\n' ;; esac
+  }
+  local out; out=$(booch_doctor_apt_keyrings)
+  rm -rf "$d"
+  assert_contains "$out" "1 repos"
+  assert_contains "$out" "keys unreadable"
+  assert_contains "$out" "bar"
+}
+
 run_tests

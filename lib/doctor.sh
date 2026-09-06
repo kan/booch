@@ -12,6 +12,9 @@
 #
 # status: ok | missing | outdated | warn | skip
 #
+# booch_doctor_apt_keyrings だけは lib/apt.sh も source 済みであることを前提にする
+# （署名鍵の期限判定を booch_apt_keyring_expiry / booch_apt_key_deadline に委ねるため）。
+#
 # 集計状態（公開）: BOOCH_DOCTOR_MISSING / _OUTDATED / _WARN（0/1）
 #
 # ラベル列の幅（公開）: BOOCH_DOCTOR_LABEL_WIDTH（既定 30）。利用側が自分のラベル集合の
@@ -303,5 +306,53 @@ booch_doctor_apt_untracked() { # tracked-package...
   else
     booch_doctor_row "$label" skip "$n 個（多くは base/依存）"
     printf '%s\n' "$untracked" | sed 's/^/      /'
+  fi
+}
+
+# サードパーティ repo の署名鍵の期限を診断する（lib/apt.sh を source 済みであること）。
+# 対象は sources.list.d の signed-by= / Signed-By: が指す keyring なので、repo を足しても
+# 利用側の追記は要らない（鍵を本文へ埋め込む PPA 形式は対象外）。期限切れ・期限間近なら
+# warn で repo 名を挙げる。復旧は booch_apt_add_repo の再実行（同じ判定で鍵を取り直す）。
+# 読めなかった keyring は「期限なし」に混ぜず別行にする（緑のまま見落とさないため）。
+booch_doctor_apt_keyrings() {
+  local label="apt signing keys" f name kr expiry deadline
+  local count=0 stale=() unread=() soonest="" soonest_name=""
+  deadline=$(booch_apt_key_deadline)
+  for f in "$BOOCH_APT_SOURCES_DIR"/*.list "$BOOCH_APT_SOURCES_DIR"/*.sources; do
+    [ -f "$f" ] || continue
+    kr=$(sed -n 's/.*[Ss]igned-[Bb]y[=:][[:space:]]*\(\/[^],[:space:]]*\).*/\1/p' "$f" | head -1)
+    [ -n "$kr" ] && [ -r "$kr" ] || continue
+    name=${f##*/}; name=${name%.*}
+    count=$((count + 1))
+    expiry=$(booch_apt_keyring_expiry "$kr")
+    case "$expiry" in
+      forever) ;;
+      expired) stale+=("$name") ;;
+      unknown) unread+=("$name") ;;
+      *)
+        if [ "$expiry" -le "$deadline" ]; then
+          stale+=("$name")
+        elif [ -z "$soonest" ] || [ "$expiry" -lt "$soonest" ]; then
+          soonest=$expiry; soonest_name=$name
+        fi ;;
+    esac
+  done
+
+  if [ "$count" -eq 0 ]; then
+    booch_doctor_row "$label" skip "signed-by の keyring が見つかりません"
+  elif [ "${#stale[@]}" -gt 0 ]; then
+    booch_doctor_row "$label" warn "期限切れ/期限間近: ${stale[*]}（setup 再実行で取り直す）"
+  elif [ "${#unread[@]}" -eq "$count" ]; then
+    # 1 本も判定できないのは gpg 側の問題。緑で「期限なし」と出さない。
+    booch_doctor_row "$label" skip "署名鍵を読めません（gpg 未導入?）"
+  elif [ -n "$soonest" ]; then
+    booch_doctor_row "$label" ok \
+      "$(( count - ${#unread[@]} )) repos, 次の期限 $(date -d "@$soonest" '+%Y-%m-%d') ($soonest_name)"
+  else
+    booch_doctor_row "$label" ok "$(( count - ${#unread[@]} )) repos, 期限なし"
+  fi
+  # 一部だけ読めなかったものは上の行に出ないので、別行で名前を挙げる。
+  if [ "${#unread[@]}" -gt 0 ] && [ "${#unread[@]}" -lt "$count" ]; then
+    booch_doctor_row "  keys unreadable" warn "${unread[*]}（署名鍵を持たない keyring?）"
   fi
 }

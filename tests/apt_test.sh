@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# lib/apt.sh のユニットテスト。副作用シーム（dist_exists / install_key / write_list）を
-# スタブで差し替え、フォールバック解決と冪等スキップの純粋ロジックを検証する。
+# lib/apt.sh のユニットテスト。副作用シーム（dist_exists / install_key / write_list /
+# keyring_records）をスタブで差し替え、フォールバック解決・冪等スキップ・署名鍵の期限
+# 判定という純粋ロジックを検証する。
 
+# stub は間接呼び出しで shellcheck から到達不能に見える（上位のシームもスタブに
+# 差し替えるため、呼び出し経路がソース上に残らない）
+# shellcheck disable=SC2317,SC2329
 TESTS_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 BOOCH_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 export BOOCH_ROOT
@@ -37,6 +41,30 @@ test_apt_resolve_fallback_warns_on_stderr() {
   local err
   err=$(booch_apt_resolve_codename https://example resolute noble 2>&1 >/dev/null)
   assert_contains "$err" "フォールバック"
+}
+
+# repo 名を渡すと、既にある .list のコードネームをそのまま返し HEAD を打たない
+# （add_repo は鍵の期限切れのため毎回呼ぶので、通信を省く判断はこちらが持つ）。
+test_apt_resolve_uses_recorded_codename() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  printf 'deb [arch=amd64 signed-by=/k] https://example jammy stable\n' > "$d/foo.list"
+  local called=0
+  booch_apt_dist_exists() { called=1; return 0; }
+  local out; out=$(booch_apt_resolve_codename https://example resolute noble foo)
+  rm -rf "$d"
+  assert_eq "jammy" "$out"
+  assert_eq "0" "$called" "記録済みなら dists/ を問い合わせない"
+}
+
+# .list が無ければ従来どおり HEAD で解決する（repo 名を渡しても振る舞いは変わらない）。
+test_apt_resolve_falls_back_to_head_without_list() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  booch_apt_dist_exists() { return 0; }
+  local out; out=$(booch_apt_resolve_codename https://example resolute noble foo)
+  rm -rf "$d"
+  assert_eq "resolute" "$out"
 }
 
 # --- add_repo の冪等・実行 ---
@@ -121,6 +149,7 @@ done
 SH
   cat > "$bin/sudo" <<'SH'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >> "${APT_TEST_SUDO_LOG:-/dev/null}"
 exec "$@"
 SH
   cat > "$bin/gpg" <<SH
@@ -143,6 +172,20 @@ test_apt_install_key_raw_success() {
   if PATH="$d/bin:$PATH" booch_apt_install_key https://x "$keyring" raw; then rc=0; else rc=$?; fi
   assert_status 0 "$rc"
   assert_eq "DUMMYKEY" "$(cat "$keyring" 2>/dev/null)"
+  rm -rf "$d"
+}
+
+# 取得した鍵が既存の keyring と同じなら書き込まない（取り直しの空振りで sudo を呼ばない）。
+test_apt_install_key_skips_write_when_identical() {
+  local d; d=$(mktemp -d)
+  _apt_make_shims "$d" 0
+  local keyring="$d/keys/foo.gpg" rc
+  mkdir -p "$d/keys"; printf 'DUMMYKEY\n' > "$keyring"   # curl シムが返すのと同じ中身
+  export APT_TEST_SUDO_LOG="$d/sudo.log"
+  if PATH="$d/bin:$PATH" booch_apt_install_key https://x "$keyring" raw; then rc=0; else rc=$?; fi
+  unset APT_TEST_SUDO_LOG
+  assert_status 0 "$rc"
+  assert_file_absent "$d/sudo.log"
   rm -rf "$d"
 }
 
@@ -182,6 +225,163 @@ test_apt_add_repo_aborts_when_key_fails() {
   rm -rf "$d"
   assert_status 1 "$rc"
   assert_eq "0" "$list_called" "鍵失敗時は write_list を呼ばない"
+}
+
+# --- keyring の署名鍵の有効性判定（gpg コロン形式のレコードで駆動する） ---
+# 期限なしの署名鍵が 1 本あれば「使える」。
+test_apt_keyring_usable_true_for_valid_key() {
+  booch_apt_keyring_records() {
+    printf 'pub:-:4096:1:AAAA:1662463626:::-:::scESC::::::23::0:\n'
+  }
+  local rc; if booch_apt_keyring_usable /tmp/kr; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+# validity が e（期限切れ）の鍵しか無ければ「使えない」。
+test_apt_keyring_usable_false_for_expired_key() {
+  booch_apt_keyring_records() {
+    printf 'pub:e:4096:1:AAAA:1662463626:1788612228::-:::sc::::::23::0:\n'
+  }
+  local rc; if booch_apt_keyring_usable /tmp/kr; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+
+# まだ切れていなくても猶予日数以内に期限が来るなら「使えない」側に数える（先回りの取り直し）。
+test_apt_keyring_usable_false_when_expiring_within_grace() {
+  local soon; soon=$(( $(date +%s) + 10 * 86400 ))
+  booch_apt_keyring_records() {
+    printf 'pub:-:4096:1:AAAA:1662463626:%s::-:::sc::::::23::0:\n' "$soon"
+  }
+  local rc; if booch_apt_keyring_usable /tmp/kr 30; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  # 猶予を狭めれば同じ鍵が「使える」に転ぶ。
+  if booch_apt_keyring_usable /tmp/kr 5; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+# 旧鍵が期限切れでも、同じ keyring に有効な新鍵があれば「使える」（上流の鍵ローテーション後）。
+test_apt_keyring_usable_true_when_rotated_key_present() {
+  booch_apt_keyring_records() {
+    printf 'pub:e:4096:1:AAAA:1662463626:1788612228::-:::sc::::::23::0:\n'
+    printf 'pub:-:4096:1:BBBB:1775559160:::-:::scESC::::::23::0:\n'
+  }
+  local rc; if booch_apt_keyring_usable /tmp/kr; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+# pub は期限切れでも、署名できる副鍵が生きていれば「使える」（docker 型の鍵構成）。
+test_apt_keyring_usable_true_for_valid_signing_subkey() {
+  booch_apt_keyring_records() {
+    printf 'pub:e:4096:1:AAAA:1487788586:1788612228::-:::escaESCA::::::23::0:\n'
+    printf 'sub:-:4096:1:BBBB:1487788586::::::s::::::23:\n'
+  }
+  local rc; if booch_apt_keyring_usable /tmp/kr; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+# 逆に、主鍵が無期限でも署名副鍵が切れていれば「使えない」。Release へ署名するのは副鍵
+# なので、長寿命の主鍵に隠れて副鍵の期限切れを見落とさない（EXPKEYSIG の再発を防ぐ）。
+test_apt_keyring_usable_false_when_signing_subkey_expired() {
+  booch_apt_keyring_records() {
+    printf 'pub:-:4096:1:AAAA:1487788586:::-:::scESC::::::23::0:\n'
+    printf 'sub:e:4096:1:BBBB:1487788586:1788612228:::::s::::::23:\n'
+  }
+  local rc; if booch_apt_keyring_usable /tmp/kr; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+
+# --- keyring の期限そのもの（doctor の表示に使う） ---
+test_apt_keyring_expiry_reports_states() {
+  booch_apt_keyring_records() { :; }
+  assert_eq "unknown" "$(booch_apt_keyring_expiry /tmp/kr)" "読めなければ判定不能"
+
+  booch_apt_keyring_records() {
+    printf 'pub:e:4096:1:AAAA:1662463626:1788612228::-:::sc::::::23::0:\n'
+  }
+  assert_eq "expired" "$(booch_apt_keyring_expiry /tmp/kr)" "生きた署名鍵が無い"
+
+  booch_apt_keyring_records() {
+    printf 'pub:-:4096:1:AAAA:1662463626:::-:::scESC::::::23::0:\n'
+  }
+  assert_eq "forever" "$(booch_apt_keyring_expiry /tmp/kr)" "期限なし"
+
+  # 生きている鍵が複数あれば、検証が壊れるのは最も遅い期限。
+  booch_apt_keyring_records() {
+    printf 'pub:-:4096:1:AAAA:1662463626:1800000000::-:::sc::::::23::0:\n'
+    printf 'pub:-:4096:1:BBBB:1662463626:1900000000::-:::sc::::::23::0:\n'
+  }
+  assert_eq "1900000000" "$(booch_apt_keyring_expiry /tmp/kr)" "最も遅い期限を返す"
+}
+
+# 署名鍵を 1 本も読み取れないとき（gpg が無い / ダミー keyring）は「使える」に倒す。
+# 判定不能を理由に鍵を取り直さないため。
+test_apt_keyring_usable_true_when_records_unavailable() {
+  booch_apt_keyring_records() { :; }
+  local rc; if booch_apt_keyring_usable /tmp/kr; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  # 暗号専用の副鍵しか無い（署名鍵として数えない）ケースも同じ扱い。
+  booch_apt_keyring_records() { printf 'sub:e:4096:1:BBBB:1662463626:1788612228:::::e::::::23:\n'; }
+  if booch_apt_keyring_usable /tmp/kr; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+}
+
+# --- 期限切れ鍵の取り直し（add_repo） ---
+# .list と keyring が両方あっても、署名鍵が使えなければ鍵だけ取り直す（.list は書き直さない）。
+test_apt_add_repo_refetches_expired_key() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  : > "$d/foo.list"; : > "$d/kr"
+  local key_called=0 list_called=0
+  booch_apt_keyring_usable() { return 1; }
+  booch_apt_install_key() { key_called=1; }
+  booch_apt_write_list()  { list_called=1; }
+  local rc
+  if booch_apt_add_repo foo https://k "$d/kr" raw "deb x" 2>/dev/null; then rc=0; else rc=$?; fi
+  rm -rf "$d"
+  assert_status 0 "$rc" "取り直しても repo 追加としては成功扱い"
+  assert_eq "1" "$key_called"  "期限切れなら鍵を取り直す"
+  assert_eq "0" "$list_called" ".list は書き直さない"
+}
+
+# 取り直しに失敗しても中断しない（repo 自体は既にある。警告だけ出して続行する）。
+test_apt_add_repo_warns_when_refetch_fails() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  : > "$d/foo.list"; : > "$d/kr"
+  booch_apt_keyring_usable() { return 1; }
+  booch_apt_install_key() { return 1; }
+  local rc err
+  if err=$(booch_apt_add_repo foo https://k "$d/kr" raw "deb x" 2>&1 >/dev/null); then rc=0; else rc=$?; fi
+  rm -rf "$d"
+  assert_status 0 "$rc"
+  assert_contains "$err" "取り直せませんでした"
+}
+
+# 取り直しても上流がまだ旧鍵のままなら、その旨を警告する（空振りを黙らせない）。
+test_apt_add_repo_warns_when_upstream_key_still_stale() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  : > "$d/foo.list"; : > "$d/kr"
+  booch_apt_keyring_usable() { return 1; }
+  booch_apt_install_key() { return 0; }
+  local err
+  err=$(booch_apt_add_repo foo https://k "$d/kr" raw "deb x" 2>&1 >/dev/null)
+  rm -rf "$d"
+  assert_contains "$err" "上流の keyring もまだ新鍵を含みません"
+}
+
+# 署名鍵が使えるうちは従来どおり何もしない（冪等スキップを取り直しで壊さない）。
+test_apt_add_repo_skips_when_key_usable() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  : > "$d/foo.list"; : > "$d/kr"
+  local called=0
+  booch_apt_keyring_usable() { return 0; }
+  booch_apt_install_key() { called=1; }
+  booch_apt_write_list()  { called=1; }
+  booch_apt_add_repo foo https://k "$d/kr" raw "deb x"
+  rm -rf "$d"
+  assert_eq "0" "$called" "鍵が有効ならスキップする"
 }
 
 # --- booch_apt_ensure（不足分のみ導入） ---
@@ -260,8 +460,6 @@ test_apt_warn_autoremove_treats_nonnumeric_as_zero() {
 }
 
 # --- booch_apt_sync（sudo/upgrade/warn を seam で制御） ---
-# stub は間接呼び出しで shellcheck から到達不能に見える
-# shellcheck disable=SC2317,SC2329
 test_apt_sync_returns_1_when_update_fails() {
   sudo() { case "$2" in update) return 1 ;; *) return 0 ;; esac; }
   booch_apt_upgrade() { return 0; }

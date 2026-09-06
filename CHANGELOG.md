@@ -5,6 +5,48 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-06
+
+### Added
+
+- `booch_apt_keyring_expiry <keyring>`（`lib/apt.sh`）: keyring の署名鍵が「いつまで使えるか」を
+  `unknown`（判定不能）/ `expired` / `forever` / epoch のいずれかで返す。`gpg --with-colons` の
+  pub / sub のうち署名能力を持つレコードだけを見る。**署名副鍵を持つ keyring では副鍵だけを
+  見る** ―― Release へ署名するのは副鍵なので、長寿命の主鍵に隠れて副鍵の期限切れを
+  見落とさないため。取得は seam `booch_apt_keyring_records` に切り出してある。
+- `booch_apt_keyring_usable <keyring> [grace-days]`（`lib/apt.sh`）: 上記の期限が猶予日数を
+  過ぎても残るかを返す。判定不能なとき（gpg が無い等）は「使える」を返し、読めないことを
+  理由に鍵を取り直さない。
+- `booch_apt_key_deadline [grace-days]`（`lib/apt.sh`）: 「これより先に期限が来る鍵は取り直す」
+  境界を epoch で返す。猶予日数の計算をここ 1 箇所に閉じ、判定側と診断側で drift させない。
+- `BOOCH_APT_KEY_RENEW_DAYS`（既定 30）: 署名鍵を期限切れの何日前から取り直すか。
+- `booch_doctor_apt_keyrings`（`lib/doctor.sh`）: サードパーティ repo の署名鍵の期限を診断する。
+  対象は `sources.list.d` の `signed-by=` / `Signed-By:` が指す keyring なので、repo を足しても
+  利用側の追記は要らない。期限切れ・期限間近なら repo 名を挙げて warn、正常なら「次に期限が
+  来る repo と日付」を出す。読めなかった keyring は「期限なし」に混ぜず別行にする
+  （判定不能を緑にしない）。`booch_doctor_apt_untracked` と同じく lib/apt.sh も source 済みが前提。
+
+### Changed
+
+- `booch_apt_add_repo` が、`<name>.list` と keyring がそろっていても**署名鍵が期限切れ
+  （または期限間近）なら鍵を取り直す**ようになった。従来は両方あれば無条件にスキップして
+  いたため、上流が鍵をローテーションしても手元の keyring は古いままで、期限が来た日から
+  `apt update` が `EXPKEYSIG` で検証に失敗し、再実行しても直らなかった（GitHub CLI の鍵が
+  2026-09-05 に期限切れになり顕在化）。取り直しに失敗しても repo 自体は既にあるので、
+  警告して続行する。取り直しても上流がまだ旧鍵のままなら、その旨も警告する。
+- `booch_apt_install_key` が **取得した鍵の中身が既存の keyring と同じなら書き込まない**
+  ようになった。上流のローテーション待ちで取り直しが空振りする間、毎回 sudo で同じ内容を
+  書き直すのを避ける。あわせて `gpg --dearmor` を sudo の前にローカルの一時ファイルへ
+  実行するようにし（配置する中身を比較前に確定させるため）、`sudo chmod go+r` は
+  `install -m 0644` に統合した。鍵取得の `curl` には `--max-time 30` を付けた ―― 猶予期間中は
+  毎回ここを通るので、応答しない網でセットアップがぶら下がらないようにする。
+- `booch_apt_resolve_codename` が省略可能な第 4 引数 `name` を取るようになった。渡すと、既に
+  `<name>.list` があるときはそこに記録されたコードネームをそのまま返し、`dists/` の HEAD
+  チェックを省く。`booch_apt_add_repo` は鍵の期限切れを見るために毎回呼ぶ必要があり、
+  呼び出しを `.list` の有無で囲えなくなったので、通信を省く判断をこちらへ移した
+  （オフライン時に誤って fallback のコードネームへ落ちるのも防ぐ）。3 引数の呼び出しは
+  従来どおり毎回 HEAD で解決する。
+
 ## [1.12.0] - 2026-09-04
 
 ### Added
@@ -362,7 +404,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/kan/booch/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/kan/booch/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/kan/booch/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/kan/booch/compare/v1.10.0...v1.11.0

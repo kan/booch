@@ -22,9 +22,14 @@
 #   booch_apt_dist_exists <base-url> <codename>   dists/<codename>/Release の存在
 #   booch_apt_install_key <url> <keyring> <mode>  鍵取得と keyring 配置（mode: dearmor|raw）
 #   booch_apt_write_list  <name> <deb-line>       sources.list.d/<name>.list 生成
+#   booch_apt_keyring_records <keyring>           keyring の鍵レコード（gpg コロン形式）
 
 # sources.list.d の場所（テストで temp に差し替えられる）。
 : "${BOOCH_APT_SOURCES_DIR:=/etc/apt/sources.list.d}"
+
+# 署名鍵を期限切れの何日前から取り直すか。0 にすると「切れてから」になる。上流は
+# 期限前に新鍵を足した keyring へ差し替えるのが通例なので、既定は前倒しにしてある。
+: "${BOOCH_APT_KEY_RENEW_DAYS:=30}"
 
 # 対象 repo に当該コードネームの dists/<codename>/Release があるか（HEAD で確認）。
 booch_apt_dist_exists() { # base-url codename
@@ -42,34 +47,41 @@ booch_apt_install_key() { # url keyring mode
     *) echo "apt: 未知の key mode: $mode（dearmor|raw）" >&2; return 2 ;;
   esac
 
-  local tmp; tmp=$(mktemp)
+  local tmp armored bin; tmp=$(mktemp); armored=
   # 成否いずれの経路でも temp を片付ける。発火時に自身を解除し（`trap - RETURN`）、
   # RETURN トラップが呼び出し元の return まで漏れて再発火するのを防ぐ（呼び出し元が
   # `set -u` だと、解放済みローカル変数を踏んで「未割り当て変数」で落ちるため）。
-  trap 'rm -f "${tmp:-}"; trap - RETURN' RETURN
+  trap 'rm -f "${tmp:-}" "${armored:-}"; trap - RETURN' RETURN
 
-  # curl を temp に落としてから処理する（パイプにせず失敗を確実に捕捉する）。
-  if ! curl -fsSL "$url" -o "$tmp"; then
+  # curl を temp に落としてから処理する（パイプにせず失敗を確実に捕捉する）。期限切れの
+  # 取り直しで毎回の setup がここを通るので、応答しない網でぶら下がらないよう時間を切る。
+  if ! curl -fsSL --max-time 30 "$url" -o "$tmp"; then
     echo "apt: 鍵の取得に失敗: $url" >&2
     return 1
+  fi
+  # dearmor も sudo の前にローカルで済ませ、配置する中身をここで確定させる。鍵の
+  # 取り直し（期限切れ時）が上流未更新で空振りしても keyring を書き換えずに済む。
+  if [ "$mode" = dearmor ]; then
+    armored=$(mktemp)
+    if ! gpg --dearmor --yes -o "$armored" "$tmp"; then
+      echo "apt: gpg --dearmor に失敗: $url" >&2
+      return 1
+    fi
+    bin=$armored
+  else
+    bin=$tmp
+  fi
+  # 中身が既存と同じなら書かない（無駄な sudo と mtime の更新を避ける）。
+  if [ -r "$keyring" ] && cmp -s "$bin" "$keyring"; then
+    return 0
   fi
   if ! sudo install -m 0755 -d "$(dirname "$keyring")"; then
     echo "apt: keyring ディレクトリ作成に失敗: $(dirname "$keyring")" >&2
     return 1
   fi
-  if [ "$mode" = dearmor ]; then
-    if ! sudo gpg --dearmor --yes -o "$keyring" "$tmp"; then
-      echo "apt: gpg --dearmor に失敗: $url" >&2
-      return 1
-    fi
-  else
-    if ! sudo install -m 0644 "$tmp" "$keyring"; then
-      echo "apt: keyring 配置に失敗: $keyring" >&2
-      return 1
-    fi
-  fi
-  if ! sudo chmod go+r "$keyring"; then
-    echo "apt: chmod に失敗: $keyring" >&2
+  # apt は keyring を root 以外からも読むので 0644 で置く（install -m がそのまま満たす）。
+  if ! sudo install -m 0644 "$bin" "$keyring"; then
+    echo "apt: keyring 配置に失敗: $keyring" >&2
     return 1
   fi
 }
@@ -80,8 +92,21 @@ booch_apt_write_list() { # name deb-line
 }
 
 # 対象 repo のコードネームを解決する。wanted の dists/ が無ければ fallback を使う。
-booch_apt_resolve_codename() { # base-url wanted fallback
-  local base=$1 wanted=$2 fallback=$3
+#
+# name を渡すと、既に <name>.list があるときはそこに記録されたコードネームをそのまま返し、
+# HEAD チェックを省く。booch_apt_add_repo は鍵の期限切れを見るために毎回呼ぶ必要があり、
+# 呼び出しを .list の有無で囲えないため、通信を省く判断はここが持つ（オフライン時に
+# 誤って fallback へ落ちるのも防ぐ）。
+booch_apt_resolve_codename() { # base-url wanted fallback [name]
+  local base=$1 wanted=$2 fallback=$3 name=${4:-} recorded
+  if [ -n "$name" ] && [ -f "$BOOCH_APT_SOURCES_DIR/$name.list" ]; then
+    # 自身が書いた行なので書式は "deb [opts] <base-url> <codename> <component>" に固定。
+    recorded=$(awk '$1 == "deb" { print $(NF - 1); exit }' "$BOOCH_APT_SOURCES_DIR/$name.list")
+    if [ -n "$recorded" ]; then
+      printf '%s' "$recorded"
+      return 0
+    fi
+  fi
   if booch_apt_dist_exists "$base" "$wanted"; then
     printf '%s' "$wanted"
   else
@@ -89,6 +114,64 @@ booch_apt_resolve_codename() { # base-url wanted fallback
       "$base" "$wanted" "$fallback" >&2
     printf '%s' "$fallback"
   fi
+}
+
+# keyring の鍵レコードを gpg のコロン形式で返す（seam）。gpg が無い / 読めないときは
+# 空を返し、呼び出し側は「判定不能」として扱う。
+booch_apt_keyring_records() { # keyring
+  command -v gpg >/dev/null 2>&1 || return 0
+  gpg --show-keys --with-colons "$1" 2>/dev/null
+}
+
+# keyring の署名鍵が「いつまで使えるか」を 1 語で返す。値は次のいずれか:
+#   unknown  署名鍵を 1 本も読み取れない（gpg が無い / keyring が読めない）＝判定不能
+#   expired  署名鍵はあるが、生きているものが 1 本も無い
+#   forever  期限の無い署名鍵が生きている
+#   <epoch>  生きている署名鍵の期限のうち最も遅いもの（＝検証が壊れる時刻）
+# pub / sub のうち署名能力（capabilities に小文字 s）を持つレコードだけを見る。
+# 署名副鍵を持つ keyring では副鍵だけを見る ―― Release へ署名するのは副鍵なので、
+# 長寿命の主鍵に隠れて副鍵の期限切れを見落とさないようにするため。
+booch_apt_keyring_expiry() { # keyring
+  local out
+  out=$(booch_apt_keyring_records "$1" | awk -F: '
+    $1 != "pub" && $1 != "sub" { next }
+    $12 !~ /s/ { next }
+    { kind[++n] = $1; validity[n] = $2; expiry[n] = $7; if ($1 == "sub") hassub = 1 }
+    END {
+      for (i = 1; i <= n; i++) {
+        if (hassub && kind[i] != "sub") continue
+        seen = 1
+        if (validity[i] == "e" || validity[i] == "r" || validity[i] == "i") continue
+        alive = 1
+        if (expiry[i] == "") { forever = 1; continue }
+        if (expiry[i] + 0 > latest) latest = expiry[i] + 0
+      }
+      if (!seen)    { print "unknown"; exit }
+      if (!alive)   { print "expired"; exit }
+      if (forever)  { print "forever"; exit }
+      print latest
+    }
+  ')
+  # awk 自体が動かない環境で空が漏れないよう、返り値をここで 4 値に正規化する
+  # （呼び出し側それぞれに空のガードを持たせない）。
+  printf '%s\n' "${out:-unknown}"
+}
+
+# 「これより先に期限が来る鍵は取り直す」境界を epoch で返す（猶予日数の唯一の実装）。
+booch_apt_key_deadline() { # [grace-days]
+  printf '%s' "$(( $(date +%s) + ${1:-$BOOCH_APT_KEY_RENEW_DAYS} * 86400 ))"
+}
+
+# keyring に「猶予日数を過ぎてもまだ使える署名鍵」が残っているか（残っていれば 0）。
+# 判定不能（unknown）は 0 を返す ―― gpg が無い環境やテストのダミー keyring で、
+# 「読めない」を再取得へ倒さないため（不明なら現状維持が安全側）。
+booch_apt_keyring_usable() { # keyring [grace-days]
+  local expiry; expiry=$(booch_apt_keyring_expiry "$1")
+  case "$expiry" in
+    unknown | forever) return 0 ;;
+    expired) return 1 ;;
+    *) [ "$expiry" -gt "$(booch_apt_key_deadline "${2:-}")" ] ;;
+  esac
 }
 
 # サードパーティ repo を追加する（冪等: 既に <name>.list があれば何もしない）。
@@ -102,6 +185,19 @@ booch_apt_add_repo() { # name key-url keyring mode deb-line
   # 完了マーカは <name>.list だが、鍵だけ消えた半端な状態を自己修復するため keyring の
   # 可読性も確認する。両方そろっていれば導入済みとみなしスキップ、欠けていれば入れ直す。
   if [ -f "$BOOCH_APT_SOURCES_DIR/$name.list" ] && [ -r "$keyring" ]; then
+    booch_apt_keyring_usable "$keyring" && return 0
+    # 鍵の期限切れは .list の有無では分からないので、ここでだけ取り直す（上流は期限前に
+    # 新鍵を足した keyring へ差し替えるのが通例）。取り直せなくても repo 自体は既にある
+    # ので、警告して続行する ―― repo 追加が本来の役目で、検証の可否は apt update が示す。
+    printf '%s[WARN]%s %s の署名鍵が期限切れ（または期限間近）です。鍵を取り直します。\n' \
+      "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$name" >&2
+    if ! booch_apt_install_key "$key_url" "$keyring" "$mode"; then
+      printf '%s[WARN]%s %s の鍵を取り直せませんでした: %s\n' \
+        "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$name" "$key_url" >&2
+    elif ! booch_apt_keyring_usable "$keyring"; then
+      printf '%s[WARN]%s %s は上流の keyring もまだ新鍵を含みません: %s\n' \
+        "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$name" "$key_url" >&2
+    fi
     return 0
   fi
   booch_apt_install_key "$key_url" "$keyring" "$mode" || return 1
