@@ -97,6 +97,11 @@ WSL2 / Ubuntu を主対象とする。BSD / macOS の `readlink` と `timeout` �
 `curl` と `sha256sum`、`lib/apt.sh` は `curl` / `gpg` / `dpkg` / `sudo`、`jobs/` の各
 ジョブは対象ツールの取得に `curl` 等。
 
+booch 本体（`bin/booch` / `install.sh` / 各スクリプト）は `#!/usr/bin/env bash` を持ち、
+常に bash プロセスとして実行される。呼び出し元のログインシェルが zsh でも問題なく動く
+（`booch <cmd>` として PATH から実行するか、`bash bootstrap.sh` のように bash 経由で
+起動する限り）。lib/ を対話シェルへ直接 `source` して使う想定はしていない。
+
 ## 使い方
 
 [bash-concurrent](https://github.com/themattrix/bash-concurrent) を土台に、

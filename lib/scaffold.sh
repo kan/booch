@@ -66,7 +66,9 @@ for f in "$HERE"/jobs/*.sh; do
 done
 
 # 例: symlink 配置（lib/fs.sh）。<実体 → 配置先> を自分の構成に合わせて書く。
+# シェルは bash / zsh どちらでもよい（bootstrap.sh 自体は bash で実行される）。
 # booch_symlink "$HERE/config/bashrc" "$HOME/.bashrc"
+# booch_symlink "$HERE/config/zshrc" "$HOME/.zshrc"
 
 # custom job を登録（jobs/example.sh が job_example を定義している前提）。
 booch_job example "example custom job" job_example 60
@@ -104,6 +106,8 @@ symlink で `$HOME` 配下へ配置する設定ファイルの実体を置く。
 `booch_symlink "$HERE/config/<file>" "$HOME/<dest>"` で張る。
 
 例: `config/bashrc` を置き、`booch_symlink "$HERE/config/bashrc" "$HOME/.bashrc"`。
+zsh 利用者は同様に `config/zshrc` →
+`booch_symlink "$HERE/config/zshrc" "$HOME/.zshrc"`。
 CONFIGREADME
 
   _booch_scaffold_write "$dir/.gitignore" <<'GITIGNORE'
