@@ -5,6 +5,8 @@
 #
 # 実行: bash examples/custom-job.sh
 #   （実運用では dotfiles が BOOCH_ROOT を知っている前提。未設定ならこのファイルから推定する）
+#   注意: 実際に $HOME/.config/myapp を作成する（デモ用の実処理。tmp には隔離していない）。
+#   後片付け: rm -rf ~/.config/myapp
 
 # job_* は runner が bash -c 経由で間接実行するため shellcheck には到達不能に見える。
 # shellcheck disable=SC2317
