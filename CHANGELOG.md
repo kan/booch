@@ -5,6 +5,12 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `.github/workflows/release-tag.yml`: `v*` タグの push で、タグが annotated であることと
+  `VERSION` がタグ名と一致することを検査する。どちらもリリース手順が散文で定めているだけ
+  だったため守られず、実際に過去のタグは lightweight / annotated が混在した。
+
 ### Changed
 
 - `examples/custom-job.sh` の書き込み先を実 `$HOME/.config/myapp` から

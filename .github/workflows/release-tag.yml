@@ -1,0 +1,48 @@
+# リリースタグ（v*）が満たすべき前提を機械で検査する。CLAUDE.md「リリース手順」が散文で
+# 定めている 2 点 —— タグは annotated で打つこと、`VERSION` がタグ名と一致すること —— は
+# 手順書だけでは守られず、実際に過去のタグは lightweight / annotated が混在した。
+# lightweight タグは `git describe`（`--tags` 無し）から無視されるため、submodule で pin した
+# 版を確認すると 1 つ前のリリースが表示される。押した直後に赤で気付けるようにする。
+name: Release Tag
+
+on:
+  push:
+    tags: ["v*"]
+
+# 検査のみで書き込み不要。
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # 供給網対策としてタグではなく commit SHA で固定する（タグ付け替えを防ぐ）。
+      # 版の更新は Dependabot が PR で運ぶ（.github/dependabot.yml）。
+      # タグオブジェクトの種別を見るため、浅い clone ではなく履歴とタグを全部取る。
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # $GITHUB_REF_NAME は Actions が渡す環境変数。${{ }} で式を run へ展開すると
+      # タグ名経由のスクリプト注入を許すため、環境変数のまま参照する。
+      - name: タグが annotated か
+        run: |
+          set -euo pipefail
+          type=$(git cat-file -t "$GITHUB_REF_NAME")
+          if [ "$type" != tag ]; then
+            echo "::error::$GITHUB_REF_NAME は lightweight タグ（$type）。annotated で打ち直す: git tag -f -a $GITHUB_REF_NAME -m $GITHUB_REF_NAME && git push -f origin $GITHUB_REF_NAME"
+            exit 1
+          fi
+          echo "$GITHUB_REF_NAME: annotated"
+
+      - name: VERSION がタグ名と一致するか
+        run: |
+          set -euo pipefail
+          want="${GITHUB_REF_NAME#v}"
+          have=$(cat VERSION)
+          if [ "$want" != "$have" ]; then
+            echo "::error::VERSION ($have) がタグ ($GITHUB_REF_NAME) と一致しない。どちらかを直す"
+            exit 1
+          fi
+          echo "VERSION: $have"
