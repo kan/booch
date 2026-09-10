@@ -191,9 +191,17 @@ GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに�
 1. `VERSION` を上げる（SemVer）。`booch version` が新版を返すことを確認
 2. `CHANGELOG.md` の `[Unreleased]` を新バージョンの節へ繰り上げ、日付と比較リンクを付ける
 3. 変更をコミット（日本語メッセージ。bump とノートを含む）
-4. タグを打って push: `git tag v1.1.0 && git push origin v1.1.0`
+4. タグを打って push: `git tag -a v1.1.0 -m v1.1.0 && git push origin v1.1.0`
+   （`git cat-file -t v1.1.0` が `tag` を返すことを確認）
 5. リリース作成: `gh release create v1.1.0 --title v1.1.0 --notes "<CHANGELOG の当該節>"`
 6. README のバッヂ／取り込み手順のタグ（`checkout v1.1.0`）が新版を指すか確認
+
+**タグは annotated（`-a`）で打つ**。`-a` 無しの lightweight タグは `git describe`（`--tags`
+無し）から無視され、利用側が `git submodule status` / `git describe` で pin 先を確認したときに
+1 つ前のリリースが表示される。過去のタグは lightweight / annotated が混在しているが、既に
+配布済みのタグを貼り直しても手元に古いタグを持つ clone は fetch で更新されず種別が食い違う
+ため、打ち直さず今後のタグだけを揃える（過去版を pin して確認する側は `git describe --tags`
+を使えば混在の影響を受けない）。
 
 ## ドキュメントの保守
 

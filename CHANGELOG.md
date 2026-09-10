@@ -5,6 +5,23 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Changed
+
+- `examples/custom-job.sh` の書き込み先を実 `$HOME/.config/myapp` から
+  `${TMPDIR:-/tmp}/booch-example/myapp` へ移した。`examples/README.md` が最初に読ませる
+  サンプルなのに、素で実行すると実ホームにディレクトリが残っていた。2 回目の実行で
+  `current` になる冪等の見せ方は変えていない（そのため `mktemp -d` ではなく固定パス）。
+- README「構成」の `lib/` ツリーに `lib/autoremove.sh` と `lib/codex-config.sh` を追記した。
+  どちらも `booch help` には出るが README には無く、構成図だけでは存在に気付けなかった。
+- README「前提」に、booch 本体は常に bash プロセスとして動くためログインシェルが zsh でも
+  問題ない旨を明記した。あわせて `booch init` の雛形（`lib/scaffold.sh`）の symlink 例と
+  `config/README.md` テンプレートに `.zshrc` の例を併記した。
+- リリース手順（`CLAUDE.md`）のタグ作成を annotated（`git tag -a`）に統一した。lightweight
+  タグは `git describe`（`--tags` 無し）から無視されるため、submodule で pin した版を
+  `git submodule status` / `git describe` で確認すると 1 つ前のリリースが表示されていた。
+  **今後のタグだけ**が annotated になる。既存タグは lightweight のまま残すので、過去版を
+  pin して確認するときは `git describe --tags` を使う。
+
 ## [1.13.0] - 2026-09-06
 
 ### Added
