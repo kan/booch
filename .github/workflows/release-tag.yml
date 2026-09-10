@@ -19,16 +19,21 @@ jobs:
     steps:
       # 供給網対策としてタグではなく commit SHA で固定する（タグ付け替えを防ぐ）。
       # 版の更新は Dependabot が PR で運ぶ（.github/dependabot.yml）。
-      # タグオブジェクトの種別を見るため、浅い clone ではなく履歴とタグを全部取る。
+      # VERSION を読むためだけなので浅い clone でよい（タグの種別はここでは取れない。下記）。
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
 
+      # checkout の版によっては、タグ push でも refspec `+<コミット SHA>:refs/tags/<名前>` で
+      # 取るため、ローカルの refs/tags/<名前> が annotated タグでもコミットを直接指す
+      # （fetch-depth を増やしても変わらない）。v7.0.1 は全 ref を 1 回取るだけなので今は
+      # 種別が残るが、版が上がれば黙って誤検知へ変わる —— 対の booch-win（checkout v5）は
+      # 実際にそれで落ちた。版に依存しないよう、種別を見る前にタグ ref を取り直す。
+      #
       # $GITHUB_REF_NAME は Actions が渡す環境変数。${{ }} で式を run へ展開すると
       # タグ名経由のスクリプト注入を許すため、環境変数のまま参照する。
       - name: タグが annotated か
         run: |
           set -euo pipefail
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
           type=$(git cat-file -t "$GITHUB_REF_NAME")
           if [ "$type" != tag ]; then
             echo "::error::$GITHUB_REF_NAME は lightweight タグ（$type）。annotated で打ち直す: git tag -f -a $GITHUB_REF_NAME -m $GITHUB_REF_NAME && git push -f origin $GITHUB_REF_NAME"

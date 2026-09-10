@@ -5,6 +5,19 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-09-10
+
+### Fixed
+
+- `.github/workflows/release-tag.yml` が checkout の版によってタグ種別を誤検知しうるのを
+  直した。`actions/checkout` はタグ push でも refspec `+<コミット SHA>:refs/tags/<名前>` で
+  取る版があり、その場合ローカルの `refs/tags/<名前>` は annotated タグでもコミットを直接
+  指すため `git cat-file -t` が `commit` を返す（`fetch-depth` を増やしても変わらない）。
+  pin している v7.0.1 は全 ref を 1 回取るだけなので今は通っていたが、Dependabot が版を
+  上げれば黙って赤へ変わる —— 対の booch-win（checkout v5）が実際にそれで落ちた。種別を
+  見る前にタグ ref を取り直すようにして、版に依存しなくした。あわせて不要になった
+  `fetch-depth: 0` を外した（`VERSION` を読むだけなら浅い clone で足りる）。
+
 ## [1.13.1] - 2026-09-10
 
 ### Added
@@ -429,7 +442,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.13.1...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.13.2...HEAD
+[1.13.2]: https://github.com/kan/booch/compare/v1.13.1...v1.13.2
 [1.13.1]: https://github.com/kan/booch/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/kan/booch/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/kan/booch/compare/v1.11.1...v1.12.0
