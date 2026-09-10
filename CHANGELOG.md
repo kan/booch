@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-10
+
 ### Added
 
 - `.github/workflows/release-tag.yml`: `v*` タグの push で、タグが annotated であることと
@@ -427,7 +429,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.13.1...HEAD
+[1.13.1]: https://github.com/kan/booch/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/kan/booch/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/kan/booch/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/kan/booch/compare/v1.11.0...v1.11.1
