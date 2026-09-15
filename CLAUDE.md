@@ -1,29 +1,29 @@
 # booch 開発ガイド
 
-booch は WSL2 / Ubuntu 向けの再実行可能な開発環境ブートストラップ基盤。**使い方・API
-の正本は [README.md](README.md)**。この CLAUDE.md は **booch 自体を安全に修正・拡張する
+booch は WSL2 / Ubuntu 向けの再実行可能な開発環境ブートストラップ基盤。**使い方と API
+の正本は [README.md](README.md)**。この CLAUDE.md は **booch 自体を安全に修正し拡張する
 ためのルールと tips** に絞る。
 
 背景: dotfiles 系スクリプトに混在しがちな汎用ブートストラップ処理の切り出し先。公開
-予定のため、個人固有・業務固有の値や前提を持ち込まない。
+リポジトリのため、個人固有や業務固有の値と前提を持ち込まない。
 
 ---
 
 ## 編集前に守る鉄則
 
-1. **冪等性を壊さない**。再実行で壊れない・無駄に再取得しない作りを保つ。
+1. **冪等性を壊さない**。再実行で壊れず、無駄に再取得しない作りを保つ。
 2. **改行は LF 固定**。shebang を壊さない。
 3. **公開 API は `booch_` プレフィックス、内部は `_booch_` / `_BOOCH_`**。この境界を保つ。
    `export` で別プロセス（ジョブ）へ渡る変数も公開扱いで `BOOCH_` を使う
    （`BOOCH_ROOT` / `BOOCH_RESULT_DIR` / `BOOCH_JOB`）。
-4. **個人固有・業務固有を持ち込まない**。トークン・特定リポジトリ名・社内ドメインなどは
+4. **個人固有や業務固有のものを持ち込まない**。トークン、特定リポジトリ名、社内ドメインなどは
    利用側 dotfiles に置く。booch は汎用部分だけを担う。
-   - **`kan/dotfiles`（作者個人の dotfiles）を一切書かない**。コード既定値・コメント・
-     ドキュメント・テスト・雛形のいずれにも登場させないこと。取り込む dotfiles は利用者が
+   - **`kan/dotfiles`（作者個人の dotfiles）を一切書かない**。コード既定値、コメント、
+     ドキュメント、テスト、雛形のいずれにも登場させないこと。取り込む dotfiles は利用者が
      渡すもの（`install.sh` なら `--repo` / 環境変数 `BOOCH_INSTALL_REPO`）で、既定に埋め込まない。
      例示が要るときは中立のプレースホルダ（`youraccount/dotfiles` / `<owner>/<name>`）を使う。
      issue 参照も個人 dotfiles リポジトリ（`kan/dotfiles#N`）へリンクしない。
-5. **コミット・バージョン bump を勝手にやらない**。コミットメッセージは日本語。
+5. **コミットとバージョン bump を勝手にやらない**。コミットメッセージは日本語。
 
 ## vendor（bash-concurrent）
 
@@ -36,15 +36,20 @@ booch は WSL2 / Ubuntu 向けの再実行可能な開発環境ブートスト�
 
 ## runner.sh のアーキテクチャ（拡張時に壊しやすい点）
 
-`concurrent` はサブシェル関数で、呼び出し時に親シェルの関数・変数を継承する。一方
-**個々のジョブは `bash -c` で起動する別プロセス**で動く。ここから次の制約が出る。
+`concurrent` はサブシェル関数で、呼び出し時に親シェルの関数と変数を継承する。一方
+**個々のジョブは `bash` で起動する別プロセス**で動く（`_booch_exec` が関数定義を一時
+スクリプトへ書き出して実行する）。ここから次の制約が出る。
 
 - **ジョブが依存してよいのは「exported 変数」と「`declare -f` で渡る関数定義」だけ**。
   非 export のグローバルや配列はジョブから見えない。新しい状態をジョブへ渡すときは
   export するか関数経由にする。
-- **timeout 有無で実行モデルを一致させてある**（どちらも `bash -c "set -e; declare -f;
-  fn"`）。この一致を崩さない。崩すと shell オプションや変数継承が分岐し、同じジョブが
+- **timeout 有無で実行モデルを一致させてある**（どちらも `set -e; declare -f; fn` を一時
+  ファイルへ書き出し、`bash <file>` で実行する。timeout ありは `timeout ... bash <file>`）。
+  この一致を崩さない。崩すと shell オプションや変数継承が分岐し、同じジョブが
   timeout 指定の有無で成否が変わる。
+- **関数定義を `bash -c "<inner>"` の引数で渡す形に戻さない**。1 引数の長さ上限
+  （MAX_ARG_STRLEN = 128KiB）を超えると execve が E2BIG で失敗し、lib と jobs の関数が
+  増えると inner はこの上限に届く。ファイル実行にはこの上限が無い。
 - **失敗ジョブのサマリー行は `_booch_exec` が自動記録する**。ジョブが非 0 終了 /
   timeout kill（exit 124・137）されると `failed` 行を書き、rc を返す。ジョブ側で明示的に
   `booch_result ... failed` を書く必要はない。
@@ -55,7 +60,7 @@ booch は WSL2 / Ubuntu 向けの再実行可能な開発環境ブートスト�
 - **caller のシェル状態を壊さない**。`concurrent` 実行中だけ `set +u` に退避して戻す
   （nounset 非対応への対処）。`export` した変数（`BOOCH_RESULT_DIR` /
   `CONCURRENT_LOG_DIR`）は `booch_run` 後に unset し、caller の後続プロセスへ漏らさない。
-- **色は tty かつ `NO_COLOR` 未設定のときだけ**使う。パイプ・CI・ログ捕捉にエスケープを
+- **色は tty かつ `NO_COLOR` 未設定のときだけ**使う。パイプ、CI、ログ捕捉にエスケープを
   混入させない。
 - **GNU coreutils 前提**（`readlink -f` / `timeout --foreground --kill-after` /
   `mktemp -d`）。BSD / macOS 非互換は許容（主対象は WSL2 / Ubuntu）。
@@ -67,32 +72,33 @@ booch は WSL2 / Ubuntu 向けの再実行可能な開発環境ブートスト�
 - **ジョブは非対話**。booch は並列ランナー内で対話できないため、「最新と異なれば
   更新」のように人手の確認なしで完結させる。更新可否の確認は利用側（dotfiles 等）が
   ジョブ登録前に行う。
-- **汎用部分だけを置く**。特定個人・特定環境でしか使わないツール（プロンプト装飾・
+- **汎用部分だけを置く**。特定の個人や環境でしか使わないツール（プロンプト装飾、
   特定エディタの LSP など）は持ち込まない。それらは利用側の custom job に残す。
-- **命名**: 登録に渡すエントリ関数は `job_<name>`、実処理を分けた継ぎ目関数は
+- 命名: 登録に渡すエントリ関数は `job_<name>`、実処理を分けた継ぎ目関数は
   `booch_<name>_*`（テストや利用側が上書きできる公開シーム）。
-- **テスト容易性**: ネットワーク / sudo を伴う実処理は継ぎ目関数に切り出し、エントリ
+- テスト容易性: ネットワーク / sudo を伴う実処理は継ぎ目関数に切り出す。エントリ
   関数の分岐（installed / updated / current / 失敗）はスタブで検証できるようにする
   （例: `jobs/go.sh` の `booch_go_latest_version` / `booch_go_installed_version` /
   `booch_go_install`）。
-- **取得物の信頼モデル**: 取得は HTTPS ＋ 公式配布元に依存する（README「セキュリティ」
+- 取得物の信頼モデル: 取得は HTTPS ＋ 公式配布元に依存する（README「セキュリティ」
   参照）。upstream がチェックサムを公開しているツールは `lib/verify.sh` で SHA256 を
-  照合する（go / circleci で導入済み。展開・`sudo` 導入の前に弾く）。upstream が
-  チェックサムを出していないツール（delta / codex 単体バイナリ / aws）は未検証。新規
+  照合する（go / circleci / starship で導入済み。展開や `sudo` での導入の前に弾く）。upstream が
+  チェックサムを出していないツール（delta / shellcheck / codex 単体バイナリ / aws）は未検証。新規
   ジョブで upstream が `.sha256` / `checksums.txt` を出していれば `booch_verify_sha256`
-  ＋ `booch_verify_pick` で照合を組み込む。残りの段階的追加は issue #1 で追う。
+  ＋ `booch_verify_pick` で照合を組み込む（starship のようにファイル名を含まない per-asset の
+  `.sha256` は `booch_verify_pick` を通さず先頭のハッシュを渡す）。残りの段階的追加は issue #1 で追う。
 
 ## ライブラリヘルパー（lib/）
 
 `lib/<name>.sh` は、ジョブや利用側 dotfiles が source して使う補助ヘルパー。runner.sh は
 そのコアで、他（apt / github / verify / fs / git / uv / claude など）も独立して source
-できる。鉄則 3（`booch_` / `_booch_` の境界）・鉄則 4（個人 / 業務固有を持ち込まない）は
-lib にも等しく効く。加えて:
+できる。鉄則 3（`booch_` / `_booch_` の境界）と鉄則 4（個人 / 業務固有を持ち込まない）は
+lib にも同じく適用する。加えて:
 
-- **各ヘルパーの使い方・依存・seam はファイル冒頭コメントを正本にする**。README には 1 行
+- **各ヘルパーの使い方、依存、seam はファイル冒頭コメントを正本にする**。README には 1 行
   説明だけ置く（README＝俯瞰、header＝個別 API の分担。重複させない）。
 - **公開 API は `booch help <name>` で引ける**（`lib/apidoc.sh` がヘッダと公開関数シグネチャを
-  ソースから抽出して表示する。jobs/ も同様）。この出力はソース生成なので、関数を追加・変更
+  ソースから抽出して表示する。jobs/ も同様）。この出力はソース生成なので、関数を追加や変更
   したら次を守ると help がそのまま API doc になる（別途 doc をメンテしない）:
   - **ファイル冒頭ヘッダの最初の非空行を、自己完結した 1 行説明にする**（`booch help` の索引に
     出る）。
@@ -113,7 +119,7 @@ lib にも等しく効く。加えて:
 ヘッダ + 公開関数シグネチャを表示する（上記「ライブラリヘルパー」の help 維持規約を参照）。
 
 - **雛形は quoted heredoc（`<<'MARK'`）で書く**。`$BOOCH_ROOT` 等を生成時に展開させないため。
-  生成物に個人固有・業務固有の値を埋め込まず、プレースホルダ（`<...>` / `(edit me)`）で示す。
+  生成物に個人固有や業務固有の値を埋め込まず、プレースホルダ（`<...>` / `(edit me)`）で示す。
 - **生成物は冪等**。既存ファイルは上書きしない（`_booch_scaffold_write` が skip する）。
 - **生成したシェルは構文妥当に保つ**。`tests/scaffold_test.sh` が生成物を `bash -n` で検証する
   ので、雛形を直したらテストで回帰を防ぐ。
@@ -153,9 +159,9 @@ GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに�
   隔離実行し集計する。
 - `tests/*_test.sh`: 各対象のテスト。runner はフェイク job で駆動し、`update.sh` は
   curl を shim で差し替えてネットワーク非依存にする。`tests/run.sh` は `*_test.sh` だけを
-  集めて実行するため、スモーク（`smoke.sh`）はユニット実行に混ざらない。
+  集めて実行するため、スモーク（`smoke.sh`）はユニット実行に含まれない。
 - テストはなるべく **code-review で見つけた不具合の回帰ガード**として書く。
-- `tests/smoke.sh` はランナーのエンドツーエンド・スモークであり、ユニットテストの代替では
+- `tests/smoke.sh` はランナーのエンドツーエンドのスモークであり、ユニットテストの代替では
   ない。利用者向けの使い方サンプルは `examples/`（実際にツールを導入する現実例を含む）。
 
 ## セキュリティ施策（CI / リポジトリ設定）
@@ -170,11 +176,11 @@ GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに�
   書いてファイル単位で抑制する）。
 - **ShellCheck の版は手元と CI で揃える**。ランナー同梱版はイメージの版に張り付くため、
   `ci.yml` は `jobs/shellcheck.sh` で最新版を導入してから検査する（`security.yml` の
-  differential-shellcheck はコンテナ同梱の shellcheck を使う）。版がズレると「ローカルで赤・
+  differential-shellcheck はコンテナ同梱の shellcheck を使う）。版がずれると「ローカルで赤、
   CI で緑」が起きるので、新しい検査が増えて手元が赤くなったら直す方を選ぶ。
 - **ワークフローの actions は commit SHA でピンし、Dependabot が追従する**
   （`.github/dependabot.yml`、github-actions エコシステム）。`uses:` は可動タグ（`@v5`）ではなく
-  `@<sha> # vX.Y.Z` の形で書く。可動タグだと中身が黙って動いて PR が出ないため、パッチ更新も
+  `@<sha> # vX.Y.Z` の形で書く。可動タグだとタグの指す中身が変わっても PR が出ないため、パッチ更新も
   差分としてレビューできるようにする。新しいワークフローを足しても同じ設定で追従対象になる。
   `vendor/bash-concurrent` は Dependabot 対象外で `vendor/update.sh`（sha256 ピン）で更新する。
 - **CodeQL は使わない**（Bash 非対応）。Code scanning は上記 ShellCheck → SARIF で代替する。
@@ -193,17 +199,19 @@ GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに�
 3. 変更をコミット（日本語メッセージ。bump とノートを含む）
 4. タグを打って push: `git tag -a v1.1.0 -m v1.1.0 && git push origin v1.1.0`
 5. リリース作成: `gh release create v1.1.0 --title v1.1.0 --notes "<CHANGELOG の当該節>"`
-6. README のバッヂ／取り込み手順のタグ（`checkout v1.1.0`）が新版を指すか確認
+README は版番号を固定で書かない（Release バッヂはリリースから自動で出し、取り込み手順は
+`vX.Y.Z` のプレースホルダ）。リリースのたびに README を書き換える必要は無いので、固定の版番号を
+README に書き足さない。
 
 **タグは annotated（`-a`）で打つ**。`-a` 無しの lightweight タグは `git describe`（`--tags`
 無し）から無視され、利用側が `git submodule status` / `git describe` で pin 先を確認したときに
-1 つ前のリリースが表示される。過去のタグは lightweight / annotated が混在しているが、既に
-配布済みのタグを貼り直しても手元に古いタグを持つ clone は fetch で更新されず種別が食い違う
-ため、打ち直さず今後のタグだけを揃える（過去版を pin して確認する側は `git describe --tags`
-を使えば混在の影響を受けない）。この前提（annotated であること・`VERSION` とタグ名の一致）は
+1 つ前のリリースが表示される。過去のタグは lightweight / annotated が混在しているが、打ち直さず
+今後のタグだけを揃える。配布済みのタグを貼り直しても、手元に古いタグを持つ clone は fetch で
+更新されず、種別が食い違うためである（過去版を pin して確認する側は `git describe --tags`
+を使えば混在の影響を受けない）。この前提（annotated であることと、`VERSION` とタグ名の一致）は
 `v*` タグの push で `.github/workflows/release-tag.yml` が検査するので、打ち間違えれば赤で気付く。
 
 ## ドキュメントの保守
 
-API・構成・前提を変えたら **README.md も更新する**。使い方の説明は README に寄せ、本
+API、構成、前提を変えたら **README.md も更新する**。使い方の説明は README に寄せ、本
 ファイルには重複させない（拡張ルールの正本は CLAUDE.md、使い方の正本は README）。

@@ -5,6 +5,27 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Fixed
+
+- README「booch 本体の取り込み」の手順を直した。submodule をタグへ `checkout` した直後に
+  `git submodule update --init` を実行していたため、`submodule add` の時点で記録された
+  既定ブランチの版へ戻り、タグへの固定が消えていた。`git add vendor/booch` で版を記録して
+  コミットする手順にし、記録前に update すると戻る理由も書いた。
+- 文書と実物の食い違いを直した。
+  - SHA256 検証済みのツールに Starship が抜けていた（SECURITY.md、CLAUDE.md）
+  - README の検証表に ShellCheck（未検証）の行が無かった
+  - `examples/bootstrap.sh` が導入する提供ジョブの列挙が実物と違った（README は shellcheck を
+    含み、`examples/README.md` は starship が抜けていた）
+  - CLAUDE.md がジョブの起動を `bash -c` と書いていた（実際は一時スクリプトを `bash <file>` で実行）
+  - uv / Claude のインストーラを `curl | sh` 系と書いていた（実際は一時ファイルへ取得して実行）
+  - CLAUDE.md のリリース手順が、README に無い固定版番号の更新確認を求めていた
+
+### Changed
+
+- README の runner API 表に `booch_result_failed` / `booch_job_sync` / `booch_result_ver` を足した。
+- README / CLAUDE.md / SECURITY.md / examples/README.md の表記を整えた（textlint の指摘、
+  地の文のダッシュと並列の中黒、長い文の分割）。
+
 ## [1.13.2] - 2026-09-10
 
 ### Fixed

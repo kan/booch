@@ -9,13 +9,15 @@
 WSL2 / Ubuntu 向けの、再実行可能な開発環境ブートストラップ基盤（Bash 製）。
 
 ツールのインストール定義（job）を並列実行し、進捗と結果をまとめて表示する。
-dotfiles スクリプトに混ざりがちな汎用的な導入や更新の処理を切り出して共有することを
-狙う。個人固有の設定（symlink、トークン、プロジェクトの pull など）は利用側の
-dotfiles に残し、booch は汎用部分だけを担う。
+dotfiles ごとに書かれがちな汎用の導入処理と更新処理を切り出し、共有できるようにする。
+個人固有の設定（symlink、トークン、プロジェクトの pull など）は利用側の dotfiles に残し、
+booch は汎用部分だけを担う。
 
-並列ジョブランナーのコアに加え、導入ヘルパー（apt / github / verify / uv / claude など）と
-提供ジョブ（go / delta / codex / aws / circleci / starship / shellcheck）、利用側 dotfiles の雛形生成（`booch init`）を
-備える。
+中心は並列ジョブランナーで、ほかに次を備える。
+
+- 導入ヘルパー（apt / github / verify / uv / claude など）
+- 提供ジョブ（go / delta / codex / aws / circleci / starship / shellcheck）
+- 利用側 dotfiles の雛形生成（`booch init`）
 
 ## クイックスタート（ワンライナー）
 
@@ -55,7 +57,7 @@ booch/
 │   ├── npm.sh                    # ローカル npm プロジェクト同期 / グローバル install
 │   ├── confirm.sh                # 更新確認 / 汎用 y/N のフレーム（tty プロンプト）
 │   ├── sudo.sh                   # 並列ジョブ向け sudo 事前キャッシュ + キープアライブ
-│   ├── fs.sh                     # symlink 配置 / TOML キーの冪等更新
+│   ├── fs.sh                     # symlink 配置 / TOML キーの冪等更新 / 壊れリンクの検出と削除
 │   ├── git.sh                    # 自己更新（pull→再exec）/ 複数リポジトリの ff-only pull
 │   ├── cleanup.sh                # cleanup フレーム（コマンド実行表示 / 解放量 / docker prune 安全・深い）
 │   ├── autoremove.sh             # 宣言外実体の掃除ドライバ（実体一覧 vs desired 集合の差分計算）
@@ -104,9 +106,9 @@ booch 本体（`bin/booch` / `install.sh` / 各スクリプト）は `#!/usr/bin
 
 ## 使い方
 
-[bash-concurrent](https://github.com/themattrix/bash-concurrent) を土台に、
+`lib/runner.sh` は、[bash-concurrent](https://github.com/themattrix/bash-concurrent) に
 ジョブ単位のタイムアウトと実行後サマリー（installed / updated / current / migrated /
-failed）を加えた薄い層が `lib/runner.sh` である。スピナー、経過秒、失敗ログの表示、
+failed）を加えたものである。スピナー、経過秒、失敗ログの表示、
 終了コードは bash-concurrent が担当する。
 
 `runner.sh` を source し、ジョブを関数として登録して並列実行する。
@@ -131,19 +133,23 @@ booch_run                                # 並列実行してサマリーを表�
 | 関数 | 役割 |
 |---|---|
 | `booch_runner_init` | vendor を読み込み、結果記録用の領域を用意する |
-| `booch_job NAME LABEL FN [TIMEOUT]` | ジョブを登録する。`NAME` は一意、`TIMEOUT` 秒は省略時 120、`0` で無効 |
+| `booch_job NAME LABEL FN [TIMEOUT]` | ジョブを登録する。`NAME` は一意、`TIMEOUT` 秒は省略時 `BOOCH_JOB_TIMEOUT_DEFAULT`（既定 120）、`0` で無効 |
 | `booch_run` | 登録済みジョブを並列実行し、サマリーを表示する |
 | `booch_status MSG` | ジョブ関数内から実行中の 1 行ステータスを更新する |
 | `booch_result TOOL STATUS [OLD] [NEW]` | ジョブ関数内からサマリー行を記録する（`STATUS`: installed / updated / current / migrated / failed） |
+| `booch_result_failed TOOL [REASON]` | failed 行を理由付きで記録する（ジョブは成功のまま、内訳の 1 件だけを失敗にするとき） |
+| `booch_job_sync LABEL NOUN CURRENT LATEST CMD...` | 現在の版と最新版を比べ、未導入なら導入、版が違えば更新して、installed / updated / current を記録する |
+| `booch_result_ver LABEL OLD NEW` | 導入の前後で取った版から installed / updated / current を記録する（導入するまで最新版が分からないツール向け） |
 
-ジョブ関数は exported 変数と関数定義だけに依存できる（別プロセスで実行されるため）。
-詳細は `CLAUDE.md` を参照。
+ジョブ関数が依存できるのは、export した変数と関数定義だけである。ジョブは `declare -f` で
+書き出した関数定義を一時スクリプトとして別の bash プロセスで実行するため、export していない
+変数や配列は子プロセスに渡らない。詳細は `CLAUDE.md` を参照。
 
 ### ライブラリヘルパー（lib/）
 
 `lib/` には、ジョブや利用側 dotfiles から source して使う補助ヘルパーを置く（APT
-リポジトリ追加・GitHub Releases 取得・SHA256 検証・uv / Claude の冪等導入・symlink 配置
-など）。各ヘルパーは公開関数を `booch_` プレフィックスで提供し、使い方・依存・テスト用の
+リポジトリ追加、GitHub Releases 取得、SHA256 検証、uv と Claude の冪等導入、symlink 配置
+など）。各ヘルパーは公開関数を `booch_` プレフィックスで提供し、使い方、依存、テスト用の
 継ぎ目（seam）をファイル冒頭のコメントに記す。ネットワーク / sudo を伴う処理は seam に
 切り出してあり、スタブで差し替えてユニットテストできる。runner.sh 以外のヘルパーは独立
 して source でき、必要なものだけ使えばよい。
@@ -154,7 +160,7 @@ booch_run                                # 並列実行してサマリーを表�
 
 ```bash
 booch help          # lib/ と jobs/ のモジュール一覧（+ 各 1 行説明）
-booch help fs       # fs.sh のヘッダ + booch_symlink / booch_set_toml_key のシグネチャ
+booch help fs       # fs.sh のヘッダ + booch_symlink などの公開関数シグネチャ
 ```
 
 ### 提供ジョブ
@@ -175,7 +181,7 @@ booch_job go "Go" job_go 300            # 未導入なら導入、最新と異�
 | サンプル | 狙い |
 |---|---|
 | `examples/custom-job.sh` | booch を source して自分用の custom job を登録する最小例 |
-| `examples/bootstrap.sh` | 提供ジョブ（go / delta / codex / aws / circleci / starship / shellcheck）を sudo 事前キャッシュ付きで一括導入する現実例 |
+| `examples/bootstrap.sh` | 提供ジョブ（go / delta / codex / aws / circleci / starship）を sudo 事前キャッシュ付きで一括導入する現実例 |
 | `examples/lib-helpers.sh` | `fs.sh` の symlink / TOML 更新、`confirm.sh` の更新確認、`sudo.sh` の事前キャッシュの使い方 |
 
 サンプルは実際にツールを導入する（network + sudo）ものを含むため、コピーして自分の環境に
@@ -183,8 +189,8 @@ booch_job go "Go" job_go 300            # 未導入なら導入、最新と異�
 
 ## 利用側 dotfiles の作り方
 
-booch は汎用基盤で、個人固有の設定（symlink・トークン・custom job）は利用側 dotfiles に
-置く。その出発点は `booch init` で雛形を生成できる（冪等。既存ファイルは上書きしない）。
+booch は汎用基盤で、個人固有の設定（symlink、トークン、custom job）は利用側 dotfiles に
+置く。出発点となる雛形は `booch init` で生成できる（冪等。既存ファイルは上書きしない）。
 
 ```bash
 bin/booch init ~/dotfiles
@@ -199,27 +205,34 @@ bin/booch init ~/dotfiles
 | `config/README.md` | symlink で `$HOME` 配下へ配置する設定ファイルの置き場 |
 | `.gitignore` / `README.md` | dotfiles リポジトリのひな形 |
 
-雛形には個人固有・業務固有の値を埋め込まず、プレースホルダで示す。
+雛形には個人固有や業務固有の値を埋め込まず、プレースホルダで示す。
 
 ### booch 本体の取り込み（推奨: git submodule + リリースタグ pin）
 
 再現性のため、booch は **git submodule で取り込み、リリースタグに固定**するのを推奨する。
-更新するときは submodule を新しいタグへ進める（いつ・どの版に上げたかが履歴に残る）。
+更新するときは submodule を新しいタグへ進める（いつ、どの版に上げたかが履歴に残る）。
 
 ```bash
 cd ~/dotfiles
 git init
 git submodule add https://github.com/kan/booch vendor/booch
-git -C vendor/booch checkout vX.Y.Z   # 最新のリリースタグに固定（更新時はタグを上げる。https://github.com/kan/booch/releases）
-git submodule update --init --recursive
+git -C vendor/booch checkout vX.Y.Z   # 最新のリリースタグに固定（https://github.com/kan/booch/releases）
+git add .gitmodules vendor/booch      # 固定した版を dotfiles 側に記録する
+git commit -m "booch を vX.Y.Z に固定"
 bash bootstrap.sh
 ```
 
+`git add vendor/booch` で記録するまでは、dotfiles 側に残っている版は `submodule add` した
+時点の既定ブランチの版である。記録する前に `git submodule update` を実行すると、submodule は
+その版へ戻り、タグへの固定が消える。版を上げるときも同じ順序で、submodule を新しいタグへ
+checkout し、`git add vendor/booch` してコミットする。別の環境で dotfiles を clone したときは
+`git submodule update --init` で記録した版を取り出す。
+
 `bootstrap.sh` は `BOOCH_ROOT` を `vendor/booch` に既定で向ける。別の場所に置いた clone を
 使いたい場合（例: `~/dotfiles` の隣に `~/booch` を clone して最新を追従する運用）は
-`BOOCH_ROOT` を上書きすればよい。取り込んだ版は `booch version` で確認できる。
+`BOOCH_ROOT` を上書きすればよい。取り込んだ版は `vendor/booch/bin/booch version` で確認できる。
 
-個々のパターン（custom job・symlink 配置・提供ジョブの組み合わせ）を単体で見たいときは
+個々のパターン（custom job、symlink 配置、提供ジョブの組み合わせ）を単体で見たいときは
 `examples/`（上記「サンプル」）を参照する。
 
 ## テスト
@@ -228,25 +241,25 @@ bash bootstrap.sh
 
 ```bash
 bash tests/run.sh        # ユニットテスト
-bash tests/smoke.sh      # ランナーのスモーク（失敗ジョブ・timeout を含むため rc=1 が正常）
+bash tests/smoke.sh      # ランナーのスモーク（失敗ジョブと timeout を含むため rc=1 が正常）
 ```
 
-`tests/smoke.sh` はランナーが正常終了・ステータス更新・サマリー各種・失敗ログ表示・
-タイムアウトをひととおり正しく扱うかを確認するエンドツーエンドのスモークで、ユニット
-テストの代替ではない。GitHub Actions（`.github/workflows/ci.yml`）が push と pull request
-ごとに、構文チェック・shellcheck・ユニットテスト・スモークを実行する。
+`tests/smoke.sh` はエンドツーエンドのスモークで、ランナーが正常終了、ステータス更新、
+各種サマリー、失敗ログの表示、タイムアウトをひととおり扱えるかを確認する。ユニットテストの
+代替ではない。GitHub Actions（`.github/workflows/ci.yml`）が push と pull request
+ごとに、構文チェック、shellcheck、ユニットテスト、スモークを実行する。
 
 ## セキュリティ（取得物の信頼モデル）
 
-提供ジョブは各ツールを HTTPS 経由で公式配布元（go.dev / GitHub Releases /
+提供ジョブと導入ヘルパーは、各ツールを HTTPS 経由で公式配布元（go.dev / GitHub Releases /
 awscli.amazonaws.com / astral.sh / claude.ai 等）から取得して導入する。転送の完全性と
 配布元の真正性は HTTPS に依存し、rustup / nvm / uv 等の公式インストーラと同水準の信頼
 モデルである。
 
-「最新版を入れる」ジョブはバージョンが事前に未知のため、固定 SHA256 ピン（vendor の
-bash-concurrent で採用）は適用できない。代わりに **upstream が実行時に公開するチェック
-サムを引いて照合する**（`lib/verify.sh`）。upstream がチェックサムを出しているツールから
-段階的に検証を追加している（[#1](https://github.com/kan/booch/issues/1)）。
+「最新版を入れる」ジョブは導入する版が実行するまで決まらないため、固定 SHA256 ピン（vendor の
+bash-concurrent で採用）は使えない。代わりに **upstream が公開するチェックサムを実行時に
+取得して照合する**（`lib/verify.sh`）。検証は、upstream がチェックサムを出しているツールから
+順に足している（[#1](https://github.com/kan/booch/issues/1)）。
 
 | ツール | 検証 | 照合元 |
 |---|---|---|
@@ -254,30 +267,30 @@ bash-concurrent で採用）は適用できない。代わりに **upstream が�
 | CircleCI CLI | ✅ SHA256 | リリースの `circleci-cli_<ver>_checksums.txt` |
 | Starship | ✅ SHA256 | リリースの per-asset `<asset>.sha256`（ハッシュのみ） |
 | delta | ❌ 未検証 | upstream がチェックサムファイルを公開していない |
+| ShellCheck | ❌ 未検証 | upstream がリリースにチェックサムを公開していない |
 | Codex CLI | ❌ 未検証 | 単体バイナリは sigstore のみで簡易チェックサムなし |
 | AWS CLI / SSM Plugin | ❌ 未検証 | GPG 署名（別機構）。導入は HTTPS の真正性に依存 |
-| uv / Claude（インストーラ） | ❌ 未検証 | `curl \| sh` 系。署名提供なし。HTTPS の真正性に依存 |
+| uv / Claude（インストーラ） | ❌ 未検証 | 公式のインストールスクリプトを一時ファイルへ取得して実行する。署名提供なし。HTTPS の真正性に依存 |
 
-検証付きツールは、取得物のハッシュが期待値と一致しなければ展開・`sudo` 導入へ進まず失敗
-する。未検証ツールは引き続き「HTTPS ＋ 配布元の真正性」に依存する（rustup / nvm / uv 等
-の公式インストーラと同水準）。
+検証付きツールは、取得物のハッシュが期待値と一致しなければ、展開や `sudo` での導入へ進まず
+失敗する。未検証ツールは「HTTPS ＋ 配布元の真正性」に依存する。
 
 ## リポジトリのセキュリティ施策
 
 booch は依存パッケージを持たない Bash 製のため、一般的な依存スキャン（Dependabot の
-gomod / npm、CodeQL 等）はそのまま適用できない。構成に合わせて次を採否した。脆弱性の
+gomod / npm、CodeQL 等）はそのまま適用できない。構成に合わせて、次のとおり採否を決めた。脆弱性の
 報告手順は [SECURITY.md](SECURITY.md) を参照。
 
 | 施策 | 採否 | 内容 / 理由 |
 |---|---|---|
 | Dependabot（github-actions） | ✅ 採用 | `.github/dependabot.yml`。ワークフローが使う Actions のバージョンを週次で追従 |
 | Actions の commit SHA ピン | ✅ 採用 | `uses:` を可動タグではなく commit SHA で固定し、タグ付け替えを防ぐ。版更新は Dependabot が PR で運ぶ |
-| Dependabot alerts / security updates | ✅ 採用 | 既知脆弱性のある Actions を検知・自動更新（リポジトリ設定で有効化） |
+| Dependabot alerts / security updates | ✅ 採用 | 既知脆弱性のある Actions を検知し、自動で更新する（リポジトリ設定で有効化） |
 | Dependabot（gomod / npm 等） | — 非該当 | package manifest を持たないため対象外 |
-| Secret scanning / Push protection | ✅ 採用 | トークン等の混入を検出・ブロック（GitHub 標準・有効） |
+| Secret scanning / Push protection | ✅ 採用 | トークン等の混入を検出し、push を止める（GitHub 標準。有効化済み） |
 | Code scanning（CodeQL） | — 非該当 | CodeQL は Bash を直接サポートしない |
 | Code scanning（ShellCheck → SARIF） | ✅ 採用 | `.github/workflows/security.yml`。CodeQL の代替として ShellCheck の結果を Security タブへ連携。失敗ゲートは CI の `shellcheck -x` が担う |
-| ShellCheck の版揃え | ✅ 採用 | CI はランナー同梱版ではなく `jobs/shellcheck.sh` で最新版を導入し、手元と同じ版で検査する（「ローカルで赤・CI で緑」を防ぐ） |
+| ShellCheck の版揃え | ✅ 採用 | CI はランナー同梱版ではなく `jobs/shellcheck.sh` で最新版を導入し、手元と同じ版で検査する（「ローカルで赤、CI で緑」を防ぐ） |
 | vendor/bash-concurrent の追従 | ⚙️ 手動 | Dependabot 対象外。`vendor/update.sh`（sha256 ピン）で更新する |
 
 ## vendor の更新
