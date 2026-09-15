@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.13.3] - 2026-09-15
+
 ### Fixed
 
 - README「booch 本体の取り込み」の手順を直した。submodule をタグへ `checkout` した直後に
@@ -466,7 +468,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.13.2...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.13.3...HEAD
+[1.13.3]: https://github.com/kan/booch/compare/v1.13.2...v1.13.3
 [1.13.2]: https://github.com/kan/booch/compare/v1.13.1...v1.13.2
 [1.13.1]: https://github.com/kan/booch/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/kan/booch/compare/v1.12.0...v1.13.0
