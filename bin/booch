@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# booch CLI。現状はサブコマンド init（利用側 dotfiles 雛形の生成）のみ。
+# booch CLI。サブコマンドの一覧は下の _booch_usage が持つ（`booch help` で表示）。
 # ライブラリ／ランナーとしての使い方は README を参照（CLI は補助で、本体は source して使う）。
 set -uo pipefail
 

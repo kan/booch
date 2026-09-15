@@ -135,4 +135,28 @@ test_install_main_help_succeeds() {
   assert_status 0 "$rc"
 }
 
+# --- --booch-ref 未指定（clone したタグの最新へ checkout / タグが無ければ既定ブランチのまま） ---
+test_install_ensure_booch_checks_out_latest_tag_when_ref_empty() {
+  local d; d=$(mktemp -d); mkdir -p "$d/df"
+  local cap_checkout=""
+  booch_install_git() {
+    case "$*" in
+      *" tag --list "*) printf 'v1.13.2\nv1.9.0\n' ;;
+      *checkout*) cap_checkout="$*" ;;
+    esac
+    return 0
+  }
+  booch_install_ensure_booch "$d/df" "" >/dev/null
+  assert_contains "$cap_checkout" "checkout v1.13.2"
+  rm -rf "$d"
+}
+test_install_ensure_booch_stays_on_default_branch_without_tags() {
+  local d; d=$(mktemp -d); mkdir -p "$d/df"
+  local cap_checkout=""
+  booch_install_git() { case "$*" in *checkout*) cap_checkout="$*" ;; esac; return 0; }
+  booch_install_ensure_booch "$d/df" "" >/dev/null 2>&1
+  assert_eq "" "$cap_checkout" "タグが無ければ checkout しない"
+  rm -rf "$d"
+}
+
 run_tests

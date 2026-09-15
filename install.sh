@@ -5,9 +5,9 @@
 #   その Linux/WSL2 版に当たる。）
 #
 # 使い方（ワンライナー）:
-#   curl -fsSL https://raw.githubusercontent.com/kan/booch/v1.0.0/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash
 #   # 引数を渡す場合は bash -s -- で後続をスクリプトへ:
-#   curl -fsSL https://raw.githubusercontent.com/kan/booch/v1.0.0/install.sh | bash -s -- \
+#   curl -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash -s -- \
 #       --dir "$HOME/dotfiles" --repo youraccount/dotfiles
 #
 # 何をするか（各ステップ冪等。無ければ入れる / 既存なら更新）:
@@ -15,7 +15,7 @@
 #   2. gh のブラウザ認証（private repo 取得のため。認証済みならスキップ）
 #   3. dotfiles repo を --dir へ clone（既存なら ff-only pull）
 #   4. submodule を初期化（submodule 方式で取り込んだ booch を取得）
-#   5. booch が見つからなければ既定の sibling パスへ clone（--booch-ref に pin）
+#   5. booch が見つからなければ既定の sibling パスへ clone（--booch-ref に pin。既定は最新のリリースタグ）
 #   6. dotfiles の setup（bootstrap.sh / setup/dotfiles を自動検出）へ委譲
 #
 # 対象: WSL2 / Ubuntu, GNU coreutils。テスト時は BOOCH_INSTALL_NO_RUN=1 で source すると
@@ -24,7 +24,6 @@
 set -uo pipefail
 
 BOOCH_INSTALL_BOOCH_REPO="https://github.com/kan/booch"
-BOOCH_INSTALL_BOOCH_REF_DEFAULT="v1.0.0"
 
 # 色は tty かつ NO_COLOR 未設定のときだけ（パイプ/CI にエスケープを混ぜない）。
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -102,8 +101,8 @@ booch_install_clone() { # repo dir
 }
 
 # 4+5. booch を確保。submodule を初期化し、無ければ sibling へ clone（ref に pin）。
-booch_install_ensure_booch() { # dir ref
-  local dir=$1 ref=$2 sib
+booch_install_ensure_booch() { # dir [ref]
+  local dir=$1 ref=${2:-} sib
   booch_install_git -C "$dir" submodule update --init --recursive 2>/dev/null || true
   if [ -f "$dir/vendor/booch/lib/runner.sh" ]; then
     _bi_ok "booch: submodule (vendor/booch)"; return 0
@@ -112,8 +111,13 @@ booch_install_ensure_booch() { # dir ref
   if [ -f "$sib/lib/runner.sh" ]; then
     _bi_ok "booch: $sib"; return 0
   fi
-  _bi_step "booch を clone: $sib ($ref)"
+  _bi_step "booch を clone: $sib"
   booch_install_git clone "$BOOCH_INSTALL_BOOCH_REPO" "$sib" || { _bi_err "booch の clone に失敗"; return 1; }
+  # ref 未指定なら clone 済みのタグから最新のリリースを選ぶ（版番号を install.sh に持たない）。
+  if [ -z "$ref" ]; then
+    ref=$(booch_install_git -C "$sib" tag --list 'v*' --sort=-v:refname | head -n1)
+    [ -n "$ref" ] || { _bi_warn "リリースタグが見つからない（既定ブランチのまま）"; return 0; }
+  fi
   booch_install_git -C "$sib" checkout "$ref" || _bi_warn "タグ $ref への checkout に失敗（既定ブランチのまま）"
 }
 
@@ -137,13 +141,13 @@ _bi_usage() {
 booch bootstrap — 素の WSL2/Ubuntu から booch を使う dotfiles を入れる
   --dir <path>        dotfiles の配置先（既定: ~/dotfiles）
   --repo <owner/name> 取り込む dotfiles repo（必須。環境変数 BOOCH_INSTALL_REPO でも指定可）
-  --booch-ref <tag>   sibling clone 時の booch タグ（既定: v1.0.0）
+  --booch-ref <tag>   sibling clone 時の booch タグ（既定: 最新のリリースタグ）
   --run <relpath>     setup エントリを明示（既定: bootstrap.sh / setup/dotfiles を自動検出）
 USAGE
 }
 
 booch_install_main() {
-  local dir="$HOME/dotfiles" repo="${BOOCH_INSTALL_REPO:-}" ref="$BOOCH_INSTALL_BOOCH_REF_DEFAULT" run=""
+  local dir="$HOME/dotfiles" repo="${BOOCH_INSTALL_REPO:-}" ref="" run=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --dir)       dir=${2:-}; shift 2 ;;

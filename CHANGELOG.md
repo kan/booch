@@ -19,6 +19,9 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
   - CLAUDE.md がジョブの起動を `bash -c` と書いていた（実際は一時スクリプトを `bash <file>` で実行）
   - uv / Claude のインストーラを `curl | sh` 系と書いていた（実際は一時ファイルへ取得して実行）
   - CLAUDE.md のリリース手順が、README に無い固定版番号の更新確認を求めていた
+- `install.sh` の `--booch-ref` の既定が v1.0.0 のままで、booch が見つからないときに古い版を
+  clone していた。`--booch-ref` を指定しなければ、clone したタグのうち最新のリリースへ
+  checkout するようにした（版番号を install.sh に持たないので、リリースのたびに更新する必要が無い）。
 
 ### Changed
 
