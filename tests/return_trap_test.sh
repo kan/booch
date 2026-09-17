@@ -55,6 +55,8 @@ _rt_stubs() {
   booch_verify_pick() { :; }
   booch_go_arch() { printf amd64; }
   booch_go_expected_sha256() { printf deadbeef; }
+  # codex: 実環境の ~/.codex を見ないよう、存在しないパスへ向ける。
+  booch_codex_standalone_dir() { printf '/nonexistent/booch-rt/standalone'; }
 }
 
 # func + args を「set -u 下の呼び出し元 return」から駆動し、落ちずに DONE まで到達するか。
@@ -85,7 +87,10 @@ test_return_trap_no_leak_delta_install() {
   assert_eq DONE "$(_rt_no_leak booch_delta_install 0.18.2 amd64)"
 }
 test_return_trap_no_leak_codex_install() {
-  assert_eq DONE "$(_rt_no_leak booch_codex_install rust-v0.1.0 x86_64)"
+  assert_eq DONE "$(_rt_no_leak booch_codex_install 0.1.0)"
+}
+test_return_trap_no_leak_codex_run_installer() {
+  assert_eq DONE "$(_rt_no_leak booch_codex_run_installer /nonexistent/install.sh 0.1.0)"
 }
 test_return_trap_no_leak_aws_cli_install() {
   assert_eq DONE "$(_rt_no_leak booch_aws_cli_install x86_64)"

@@ -5,6 +5,29 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Changed
+
+- `jobs/codex.sh` の導入方式を、GitHub Releases の単体バイナリから公式インストーラ
+  （`https://chatgpt.com/codex/install.sh`）に変えた。Codex CLI は付随の実行ファイル
+  （codex-code-mode-host / rg / bwrap）を含むパッケージとして配布されるようになり、単体
+  バイナリだけでは正常に動かないため。
+  - 導入先が `/usr/local/bin/codex` から `$CODEX_INSTALL_DIR`（既定 `~/.local/bin`）の symlink に
+    変わる。**利用側で `~/.local/bin` を PATH に通しておく必要がある。** インストーラがシェルの
+    設定ファイルへ PATH を追記しないよう、HOME を一時ディレクトリに差し替えて実行する。
+  - 導入済みの版は導入先の codex から取る（PATH 上の codex は見ない）。
+  - 更新も同じインストーラで行う。導入後、current と直前の版以外のパッケージを
+    `$CODEX_HOME/packages/standalone/releases/` から削除する。
+  - インストーラでの導入が済んでいれば、以前の booch が置いた `/usr/local/bin/codex`（`codex-cli`
+    を名乗る実ファイルのときだけ）を毎回 sudo で削除する（一度失敗しても次の実行で再試行する）。
+    撤去するのは booch 自身が置いた物だけで、npm 版など他の経路の codex は利用側に任せる。
+  - パッケージの SHA256 はインストーラが照合する（README の検証表を更新）。
+  - 公開 seam の `booch_codex_install` の引数を `<tag> <arch>` から `<version>`（rust-v を外した
+    X.Y.Z）に変えた。`booch_codex_artifact` を削除し、`booch_codex_bin_dir` / `booch_codex_home` /
+    `booch_codex_standalone_dir` / `booch_codex_current_release` / `booch_codex_fetch_installer` /
+    `booch_codex_run_installer` / `booch_codex_prune_releases` / `booch_codex_legacy_path` /
+    `booch_codex_remove_legacy` を足した。
+- `examples/bootstrap.sh` の codex ジョブのタイムアウトを 300 秒にした（パッケージが大きくなったため）。
+
 ## [1.13.3] - 2026-09-15
 
 ### Fixed

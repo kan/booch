@@ -82,8 +82,9 @@ booch は WSL2 / Ubuntu 向けの再実行可能な開発環境ブートスト�
   `booch_go_install`）。
 - 取得物の信頼モデル: 取得は HTTPS ＋ 公式配布元に依存する（README「セキュリティ」
   参照）。upstream がチェックサムを公開しているツールは `lib/verify.sh` で SHA256 を
-  照合する（go / circleci / starship で導入済み。展開や `sudo` での導入の前に弾く）。upstream が
-  チェックサムを出していないツール（delta / shellcheck / codex 単体バイナリ / aws）は未検証。新規
+  照合する（go / circleci / starship で導入済み。展開や `sudo` での導入の前に弾く）。codex は公式
+  インストーラ自身がパッケージの SHA256 を照合する。upstream が
+  チェックサムを出していないツール（delta / shellcheck / aws）は未検証。新規
   ジョブで upstream が `.sha256` / `checksums.txt` を出していれば `booch_verify_sha256`
   ＋ `booch_verify_pick` で照合を組み込む（starship のようにファイル名を含まない per-asset の
   `.sha256` は `booch_verify_pick` を通さず先頭のハッシュを渡す）。残りの段階的追加は issue #1 で追う。

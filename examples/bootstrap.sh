@@ -41,7 +41,7 @@ trap 'booch_sudo_stop' EXIT
 # tarball 取得を含む go は timeout を長めに。ジョブ名は一意にする。
 booch_job go       "Go + tools"        job_go       300
 booch_job delta    "delta (git pager)" job_delta    120
-booch_job codex    "Codex CLI"         job_codex    120
+booch_job codex    "Codex CLI"         job_codex    300
 booch_job aws      "AWS CLI + SSM"     job_aws      180
 booch_job circleci "CircleCI CLI"      job_circleci 120
 booch_job starship "Starship"          job_starship 180

@@ -67,7 +67,7 @@ booch/
 ├── jobs/
 │   ├── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新
 │   ├── delta.sh                  # 提供ジョブ: delta (git pager) の導入 / 更新
-│   ├── codex.sh                  # 提供ジョブ: Codex CLI の導入 / 更新
+│   ├── codex.sh                  # 提供ジョブ: Codex CLI の導入 / 更新（公式インストーラ。~/.local/bin を PATH に通しておく）
 │   ├── aws.sh                    # 提供ジョブ: AWS CLI v2 + Session Manager Plugin
 │   ├── circleci.sh               # 提供ジョブ: CircleCI CLI の導入 / 更新
 │   ├── starship.sh               # 提供ジョブ: Starship プロンプトの導入 / 更新
@@ -268,7 +268,7 @@ bash-concurrent で採用）は使えない。代わりに **upstream が公開�
 | Starship | ✅ SHA256 | リリースの per-asset `<asset>.sha256`（ハッシュのみ） |
 | delta | ❌ 未検証 | upstream がチェックサムファイルを公開していない |
 | ShellCheck | ❌ 未検証 | upstream がリリースにチェックサムを公開していない |
-| Codex CLI | ❌ 未検証 | 単体バイナリは sigstore のみで簡易チェックサムなし |
+| Codex CLI（インストーラ） | ✅ SHA256（インストーラが照合） | 公式のインストールスクリプトを一時ファイルへ取得して実行する。スクリプト自体は未検証（HTTPS の真正性に依存）で、スクリプトがリリースの `codex-package_SHA256SUMS` でパッケージを照合する |
 | AWS CLI / SSM Plugin | ❌ 未検証 | GPG 署名（別機構）。導入は HTTPS の真正性に依存 |
 | uv / Claude（インストーラ） | ❌ 未検証 | 公式のインストールスクリプトを一時ファイルへ取得して実行する。署名提供なし。HTTPS の真正性に依存 |
 
