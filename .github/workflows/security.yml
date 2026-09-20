@@ -31,7 +31,7 @@ jobs:
       # SHA 固定により、同梱 shellcheck の版更新も Dependabot の PR として可視化される
       # （@v5 の可動タグ参照だと版が黙って動き、PR が出ない）。
       - name: Differential ShellCheck
-        uses: redhat-plumbers-in-action/differential-shellcheck@d965e66ec0b3b2f821f75c8eff9b12442d9a7d1e # v5.5.6
+        uses: redhat-plumbers-in-action/differential-shellcheck@f51c7c0d32777d00de777131d25918617a246415 # v5.5.7
         with:
           severity: style
           token: ${{ secrets.GITHUB_TOKEN }}
