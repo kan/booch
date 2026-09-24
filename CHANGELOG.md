@@ -5,6 +5,15 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Changed
+
+- `lib/state.sh` と `lib/apt.sh` で、外部プロセスの起動を減らした。挙動は変わらない（#18）。
+  - `_booch_state_file`: id の符号化とパスの返却を `printf -v` にし、1 文字ごとの fork と、
+    呼び出しごとのコマンド置換の fork をなくした
+  - `booch_state_changed`: 記録を `cat` ではなく `read` で読む
+  - `booch_state_fresh` / `booch_apt_key_deadline`: 現在時刻を `date +%s` ではなく
+    `printf '%(%s)T' -1` で取る。`lib/state.sh` は `date` に依存しなくなった
+
 ### Added
 
 - `lib/doctor.sh` にラベル列の幅を求める 2 つの関数を足した。どちらも現在の

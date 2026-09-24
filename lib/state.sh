@@ -27,23 +27,26 @@
 #
 # 判定できないとき（sha256sum が無い、記録が読めない）は、常に「実行が要る」側へ倒す。
 #
-# 依存: sha256sum, stat, date, mkdir, touch（GNU coreutils）。
+# 依存: sha256sum, stat, mkdir, touch（GNU coreutils）。
 
 # id に対応する記録ファイルのパス。id は利用側が組み立てるラベルで、設定名やサーバー名が
 # 入るので、英数と ._- 以外をパーセントエンコード（%XX）する。変換は単射なので別々の id が
 # 同じファイルに当たらず、パス区切りでディレクトリを掘ることもない。先頭の . も符号化して、
 # 隠しファイルや . / .. にならないようにする。空の id は「%」（符号化では現れない名前）にする。
-_booch_state_file() { # id
-  local id=$1 name="" c i LC_ALL=C
-  for ((i = 0; i < ${#id}; i++)); do
-    c=${id:i:1}
-    if [[ $c == [A-Za-z0-9_-] || ($c == . && i -gt 0) ]]; then
-      name+=$c
+# 結果は変数 var へ printf -v で入れる（$(...) で受けると呼び出しごとに fork するため）。
+# 局所変数は _ 付きにして、呼び出し側の var 名と衝突させない。
+_booch_state_file() { # var id
+  local _id=$2 _name="" _c _enc _i LC_ALL=C
+  for ((_i = 0; _i < ${#_id}; _i++)); do
+    _c=${_id:_i:1}
+    if [[ $_c == [A-Za-z0-9_-] || ($_c == . && _i -gt 0) ]]; then
+      _name+=$_c
     else
-      name+=$(printf '%%%02X' "'$c")
+      printf -v _enc '%%%02X' "'$_c"
+      _name+=$_enc
     fi
   done
-  printf '%s/%s\n' "${BOOCH_STATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/booch/state}" "${name:-%}"
+  printf -v "$1" '%s/%s' "${BOOCH_STATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/booch/state}" "${_name:-%}"
 }
 
 # 引数列を 1 つのハッシュに畳む。区切りは NUL なので、値に空白や改行が入っても隣の引数と
@@ -56,17 +59,20 @@ booch_hash_args() { # str...
 # 記録と hash が違えば 0（= 実行が要る）。未記録と、hash が空（ハッシュを取れない環境）も
 # 「変わった」扱いにする。
 booch_state_changed() { # id hash
-  local hash=$2 file
+  local hash=$2 file recorded=""
   [ -n "$hash" ] || return 0
-  file=$(_booch_state_file "$1")
-  [ "$(cat "$file" 2>/dev/null)" != "$hash" ]
+  _booch_state_file file "$1"
+  # 記録は hash 1 行。読めない（未記録）ときは空のまま比べる。read の非 0 で caller の
+  # set -e に止められないよう、失敗は無視する。
+  { IFS= read -r recorded < "$file"; } 2>/dev/null || :
+  [ "$recorded" != "$hash" ]
 }
 
 # 処理が成功したあとに hash を記録する。空の hash は記録しない（次回も実行される）。
 booch_state_record() { # id hash
   local hash=$2 file
   [ -n "$hash" ] || return 0
-  file=$(_booch_state_file "$1")
+  _booch_state_file file "$1"
   mkdir -p "${file%/*}" || return 1
   printf '%s\n' "$hash" > "$file"
 }
@@ -75,16 +81,17 @@ booch_state_record() { # id hash
 # 記録が無い（stat が失敗する）、mtime が未来（時計が進んだ状態で touch した）ときは「古い」
 # 扱いにする。未来のまま fresh と見なすと、時計が追いつくまで処理が飛ばされ続ける。
 booch_state_fresh() { # id max_age_sec
-  local max_age=$2 file mtime age
-  file=$(_booch_state_file "$1")
+  local max_age=$2 file mtime now age
+  _booch_state_file file "$1"
   mtime=$(stat -c %Y "$file" 2>/dev/null) || return 1
-  age=$(($(date +%s) - mtime))
+  printf -v now '%(%s)T' -1
+  age=$((now - mtime))
   [ "$age" -ge 0 ] && [ "$age" -lt "$max_age" ]
 }
 
 # 実行した時刻を記録する（booch_state_fresh と対）。
 booch_state_touch() { # id
-  local file; file=$(_booch_state_file "$1")
+  local file; _booch_state_file file "$1"
   mkdir -p "${file%/*}" || return 1
   touch "$file"
 }

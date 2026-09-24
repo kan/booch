@@ -159,7 +159,9 @@ booch_apt_keyring_expiry() { # keyring
 
 # 「これより先に期限が来る鍵は取り直す」境界を epoch で返す（猶予日数の唯一の実装）。
 booch_apt_key_deadline() { # [grace-days]
-  printf '%s' "$(( $(date +%s) + ${1:-$BOOCH_APT_KEY_RENEW_DAYS} * 86400 ))"
+  local now
+  printf -v now '%(%s)T' -1
+  printf '%s' "$(( now + ${1:-$BOOCH_APT_KEY_RENEW_DAYS} * 86400 ))"
 }
 
 # keyring に「猶予日数を過ぎてもまだ使える署名鍵」が残っているか（残っていれば 0）。

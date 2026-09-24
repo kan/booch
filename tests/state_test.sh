@@ -18,22 +18,27 @@ _use_temp_state_dir() {
   trap "rm -rf '$BOOCH_STATE_DIR'" EXIT
 }
 
+# _booch_state_file は結果を変数へ返すので、比べやすいよう標準出力へ出す。
+_path_of() { # id
+  local p; _booch_state_file p "$1"; printf '%s' "$p"
+}
+
 # --- 置き場 ---
 test_state_dir_defaults_to_xdg_cache() {
   unset BOOCH_STATE_DIR
   XDG_CACHE_HOME=/x/cache
-  assert_eq /x/cache/booch/state/t "$(_booch_state_file t)"
+  assert_eq /x/cache/booch/state/t "$(_path_of t)"
 }
 
 test_state_dir_falls_back_to_home_cache() {
   unset BOOCH_STATE_DIR XDG_CACHE_HOME
   HOME=/h
-  assert_eq /h/.cache/booch/state/t "$(_booch_state_file t)"
+  assert_eq /h/.cache/booch/state/t "$(_path_of t)"
 }
 
 test_state_dir_uses_caller_value() {
   BOOCH_STATE_DIR=/mine
-  assert_eq /mine/t "$(_booch_state_file t)"
+  assert_eq /mine/t "$(_path_of t)"
 }
 
 # source しただけで利用側の環境へ変数を出さない。
@@ -46,12 +51,12 @@ test_source_does_not_export_state_dir() {
 # --- 記録ファイルの名前 ---
 test_safe_id_keeps_plain_name() {
   BOOCH_STATE_DIR=/s
-  assert_eq /s/doctor-daily.v2_x "$(_booch_state_file doctor-daily.v2_x)"
+  assert_eq /s/doctor-daily.v2_x "$(_path_of doctor-daily.v2_x)"
 }
 
 test_unsafe_chars_are_percent_encoded() {
   BOOCH_STATE_DIR=/s
-  assert_eq /s/a%2Fb%20c%3Ad%25 "$(_booch_state_file 'a/b c:d%')"
+  assert_eq /s/a%2Fb%20c%3Ad%25 "$(_path_of 'a/b c:d%')"
 }
 
 # 潰すだけだと同じ名前になる id どうしを取り違えない。
@@ -65,19 +70,19 @@ test_ids_colliding_after_naive_sanitize_are_distinct() {
 # 先頭の . は符号化する（隠しファイルや . / .. にしない）。途中の . はそのまま。
 test_leading_dot_is_encoded() {
   BOOCH_STATE_DIR=/s
-  assert_eq /s/%2E. "$(_booch_state_file ..)"
-  assert_eq /s/%2Ea.b "$(_booch_state_file .a.b)"
+  assert_eq /s/%2E. "$(_path_of ..)"
+  assert_eq /s/%2Ea.b "$(_path_of .a.b)"
 }
 
 test_empty_id_does_not_point_to_state_dir() {
   BOOCH_STATE_DIR=/s
-  assert_eq /s/% "$(_booch_state_file "")"
+  assert_eq /s/% "$(_path_of "")"
 }
 
 # マルチバイト文字はバイト単位で符号化する。
 test_multibyte_id_is_encoded_by_bytes() {
   BOOCH_STATE_DIR=/s
-  assert_eq /s/%E3%81%82 "$(_booch_state_file あ)"
+  assert_eq /s/%E3%81%82 "$(_path_of あ)"
 }
 
 # --- booch_hash_args ---
@@ -110,6 +115,21 @@ test_not_changed_after_record() {
   local h; h=$(booch_hash_args x)
   booch_state_record t "$h"
   if booch_state_changed t "$h"; then fail "記録したのに「変わった」と判定した"; fi
+}
+
+# 未記録で記録の読み込みが失敗しても、set -e の下（run_tests はテストを set -e で走らせる）で
+# 途中終了せず「変わった」（0）を返す。条件の外で呼ぶので、非 0 ならこの行でテストが落ちる。
+test_changed_when_not_recorded_under_errexit() {
+  _use_temp_state_dir
+  booch_state_changed t "$(booch_hash_args x)"
+}
+
+# 記録の末尾に改行が無くても、同じ hash なら「変わっていない」。
+test_not_changed_when_record_lacks_newline() {
+  _use_temp_state_dir
+  local h; h=$(booch_hash_args x)
+  mkdir -p "$BOOCH_STATE_DIR"; printf '%s' "$h" > "$BOOCH_STATE_DIR/t"
+  if booch_state_changed t "$h"; then fail "改行の無い記録を「変わった」と判定した"; fi
 }
 
 test_changed_when_hash_differs() {
