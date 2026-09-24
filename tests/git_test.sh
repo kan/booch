@@ -180,26 +180,25 @@ test_self_update_fetch_failure_aborts() {
 }
 
 # fetch タイムアウトは既定 10 秒。timeout の期間引数を捕捉して確認する。
+# timeout は $(...) の中で呼ばれるので、変数ではなくファイルで捕捉する。
 test_self_update_fetch_timeout_default() {
   unset BOOCH_GIT_FETCH_TIMEOUT
   _stub_git; _G_COUNTS="0 0"
-  local cap=""
-  timeout() { cap=$1; shift; "$@"; }
-  local d; d=$(_mk_repo)
+  local d cap; d=$(_mk_repo); cap=$(mktemp)
+  timeout() { printf '%s' "$1" > "$cap"; shift; "$@"; }
   booch_git_self_update "$d" true >/dev/null
-  assert_eq "10" "$cap"
-  rm -rf "$d"
+  assert_eq "10" "$(cat "$cap")"
+  rm -rf "$d" "$cap"
 }
 
 # BOOCH_GIT_FETCH_TIMEOUT で fetch タイムアウトを延ばせる。
 test_self_update_fetch_timeout_env_override() {
   _stub_git; _G_COUNTS="0 0"
-  local cap=""
-  timeout() { cap=$1; shift; "$@"; }
-  local d; d=$(_mk_repo)
+  local d cap; d=$(_mk_repo); cap=$(mktemp)
+  timeout() { printf '%s' "$1" > "$cap"; shift; "$@"; }
   BOOCH_GIT_FETCH_TIMEOUT=45 booch_git_self_update "$d" true >/dev/null
-  assert_eq "45" "$cap"
-  rm -rf "$d"
+  assert_eq "45" "$(cat "$cap")"
+  rm -rf "$d" "$cap"
 }
 
 run_tests

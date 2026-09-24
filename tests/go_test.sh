@@ -70,9 +70,11 @@ test_go_tools_installs_by_basename() {
   booch_runner_init
   export BOOCH_JOB=go
   export BOOCH_GO_TOOLS="github.com/justjanne/powerline-go"
-  booch_go_tool_install() { :; }
-  local _calls=0
-  booch_go_tool_version() { _calls=$((_calls+1)); [ "$_calls" -le 1 ] && printf '' || printf 'v1.2.3'; }
+  # version は $(...) の中で呼ばれ、カウンタが呼び出し元に残らない。install（直接呼ばれる）の
+  # 前後で返す版を切り替える。
+  local _installed=0
+  booch_go_tool_install() { _installed=1; }
+  booch_go_tool_version() { if [ "$_installed" = 1 ]; then printf 'v1.2.3'; fi; }
   booch_go_tools_ensure
   assert_eq "powerline-go|installed||v1.2.3" "$(cat "$BOOCH_RESULT_DIR/go.result")"
   unset BOOCH_GO_TOOLS
@@ -83,9 +85,9 @@ test_go_tools_updates_when_version_changes() {
   booch_runner_init
   export BOOCH_JOB=go
   export BOOCH_GO_TOOLS="golang.org/x/tools/gopls"
-  booch_go_tool_install() { :; }
-  local _calls=0
-  booch_go_tool_version() { _calls=$((_calls+1)); [ "$_calls" -le 1 ] && printf 'v0.1.0' || printf 'v0.2.0'; }
+  local _installed=0
+  booch_go_tool_install() { _installed=1; }
+  booch_go_tool_version() { if [ "$_installed" = 1 ]; then printf 'v0.2.0'; else printf 'v0.1.0'; fi; }
   booch_go_tools_ensure
   assert_eq "gopls|updated|v0.1.0|v0.2.0" "$(cat "$BOOCH_RESULT_DIR/go.result")"
   unset BOOCH_GO_TOOLS

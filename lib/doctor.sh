@@ -165,7 +165,7 @@ booch_doctor_disk() { # label path warn_gb [hint]
   case "$warn_gb" in '' | *[!0-9]*) warn_gb=0 ;; esac
   if [ "$warn_gb" -gt 0 ] && [ "$avail_kb" -lt $((warn_gb * 1024 * 1024)) ]; then
     booch_doctor_row "$label" warn "$value ← ${warn_gb}GB 未満"
-    [ -n "$hint" ] && printf '    %s\n' "$hint"
+    if [ -n "$hint" ]; then printf '    %s\n' "$hint"; fi
   else
     booch_doctor_row "$label" ok "$value"
   fi

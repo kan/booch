@@ -39,7 +39,9 @@ booch_sudo_prime() {
 # （kill だけだと sleep が最大 50 秒残る）。
 booch_sudo_stop() {
   [ -n "$BOOCH_SUDO_KEEPALIVE_PID" ] || return 0
-  kill "$BOOCH_SUDO_KEEPALIVE_PID" 2>/dev/null
-  pkill -P "$BOOCH_SUDO_KEEPALIVE_PID" 2>/dev/null
+  # 既に終わっている（子が無い）ときの非 0 で、caller の set -e に止められて PID を
+  # 残さないよう、失敗は無視する。
+  kill "$BOOCH_SUDO_KEEPALIVE_PID" 2>/dev/null || true
+  pkill -P "$BOOCH_SUDO_KEEPALIVE_PID" 2>/dev/null || true
   BOOCH_SUDO_KEEPALIVE_PID=""
 }

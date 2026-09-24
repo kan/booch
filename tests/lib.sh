@@ -37,9 +37,16 @@ assert_file_absent() { # path [msg]
 run_tests() {
   local fns fn out
   mapfile -t fns < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
-  local pass=0 failc=0
+  local pass=0 failc=0 rc errexit=
+  case $- in *e*) errexit=1 ;; esac
   for fn in "${fns[@]}"; do
-    if out=$( set -e; "$fn" 2>&1 ); then
+    # if / || / && の条件の中で実行すると、サブシェル内の set -e が無効になり、最後の行の
+    # 終了コードだけで合否が決まる（途中の assert の失敗を見逃す）。条件の外で実行して
+    # 終了コードを取る。caller が set -e でも失敗で抜けないよう、この 1 行だけ +e にする。
+    set +e
+    out=$( set -e; "$fn" 2>&1 ); rc=$?
+    [ -z "$errexit" ] || set -e
+    if [ "$rc" -eq 0 ]; then
       printf '  ok   %s\n' "$fn"
       pass=$((pass + 1))
     else
