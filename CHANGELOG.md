@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-09-24
+
 ### Fixed
 
 - `booch_claude_marketplace_list` が、未登録の marketplace も登録済みとして返していた。
@@ -546,7 +548,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.16.1...HEAD
+[1.16.1]: https://github.com/kan/booch/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/kan/booch/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/kan/booch/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/kan/booch/compare/v1.13.3...v1.14.0
