@@ -346,6 +346,46 @@ test_doctor_symlinks_warn_when_missing() {
   rm -rf "$d"
 }
 
+# --- booch_doctor_symlinks のラベル列幅（issue #16） ---
+# 30 桁を超えるラベルがあっても、全行の状態列が同じ桁から始まる。
+test_doctor_symlinks_aligns_status_beyond_default_width() {
+  booch_doctor_init
+  local HOME=/nonexistent-home
+  local long="$HOME/.claude-faber/skills/cognitive-rhythm-writing"   # ラベル 47 桁
+  local out; out=$(booch_doctor_symlinks "/x|$long" "/x|$HOME/.bashrc")
+  # 各行の [WARN] の開始位置（awk の index）が 1 種類だけであること。
+  assert_eq "1" "$(printf '%s\n' "$out" | awk '{print index($0, "[WARN]")}' | sort -u | wc -l)"
+  assert_contains "$out" "/.claude-faber/skills/cognitive-rhythm-writing [WARN]"
+}
+# 広げた幅は関数内だけで、呼び出し後の booch_doctor_row は元の幅に戻る。
+test_doctor_symlinks_does_not_leak_width() {
+  booch_doctor_init
+  local HOME=/nonexistent-home
+  booch_doctor_symlinks "/x|$HOME/.claude-faber/skills/cognitive-rhythm-writing" >/dev/null
+  assert_eq "unset" "${BOOCH_DOCTOR_LABEL_WIDTH-unset}"
+  assert_contains "$(booch_doctor_row "go" ok "v")" "$(_expect_go_ok 30)"
+}
+# width ヘルパーは現在の幅と最長ラベルの大きいほうを返す。
+test_doctor_symlinks_width_takes_longest_label() {
+  local HOME=/nonexistent-home
+  assert_eq "30" "$(booch_doctor_symlinks_width "/x|$HOME/.bashrc")"
+  assert_eq "47" "$(booch_doctor_symlinks_width "/x|$HOME/.bashrc" \
+    "/x|$HOME/.claude-faber/skills/cognitive-rhythm-writing")"
+  assert_eq "60" "$(BOOCH_DOCTOR_LABEL_WIDTH=60 booch_doctor_symlinks_width \
+    "/x|$HOME/.claude-faber/skills/cognitive-rhythm-writing")"
+}
+# 汎用の幅ヘルパー: 現在の幅と渡したラベルの最長の大きいほう。
+test_doctor_labels_width_takes_longest_label() {
+  assert_eq "30" "$(booch_doctor_labels_width "go" "node")"
+  assert_eq "34" "$(booch_doctor_labels_width "go" "typescript-language-server-34chars")"
+  assert_eq "30" "$(booch_doctor_labels_width)"
+}
+# 長さは printf の %-*s に合わせてバイト数で数える（"~/あい" は 2 + 6 バイト）。
+test_doctor_symlinks_width_counts_bytes() {
+  local HOME=/nonexistent-home
+  assert_eq "8" "$(BOOCH_DOCTOR_LABEL_WIDTH=1 booch_doctor_symlinks_width "/x|$HOME/あい")"
+}
+
 # --- booch_doctor_apt_untracked（env gate + apt-mark を seam） ---
 test_doctor_apt_untracked_skips_without_env() {
   booch_doctor_init

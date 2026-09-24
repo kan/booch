@@ -5,6 +5,21 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `lib/doctor.sh` にラベル列の幅を求める 2 つの関数を足した。どちらも現在の
+  `BOOCH_DOCTOR_LABEL_WIDTH` と最長ラベルの大きいほうを返す。長さは `printf` の `%-*s` に合わせて
+  バイト数で数える。節の前に `BOOCH_DOCTOR_LABEL_WIDTH` をこの値にすれば、節全体の状態列が揃う。
+  - `booch_doctor_labels_width label...`: 任意のラベルの集合から求める
+  - `booch_doctor_symlinks_width "src|dest"...`: `booch_doctor_symlinks` と同じ規則でラベルを
+    組み立てて求める。ラベルの組み立て規則を利用側へ写さずに済む
+
+### Fixed
+
+- `booch_doctor_symlinks` で、ラベル（dest の `$HOME` を `~` に短縮したもの）が
+  `BOOCH_DOCTOR_LABEL_WIDTH`（既定 30）を超える行だけ状態の列が後ろへずれていた。関数内で幅を最長
+  ラベルまで広げて描画する。広げた幅は関数を抜けると元に戻る（#16）。
+
 ## [1.15.0] - 2026-09-24
 
 ### Added

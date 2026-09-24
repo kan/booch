@@ -19,6 +19,8 @@
 #
 # ラベル列の幅（公開）: BOOCH_DOCTOR_LABEL_WIDTH（既定 30）。利用側が自分のラベル集合の
 # 最長幅に合わせて上書きできる。正の整数以外を渡すと既定 30 にフォールバックする。
+# booch_doctor_symlinks は自分のラベルの最長に合わせて幅を広げる（booch_doctor_symlinks_width）。
+# 節全体を揃えたいときは booch_doctor_labels_width で幅を求めて上書きする。
 
 # 色は lib/color.sh に集約（_BOOCH_COLOR_*）。BOOCH_ROOT 未設定時は本ファイルから推定。
 if [ -z "${BOOCH_ROOT:-}" ]; then
@@ -260,20 +262,56 @@ booch_doctor_apt_pkg() { # label command package
   fi
 }
 
+# ラベル列の幅を返す。現在の幅（BOOCH_DOCTOR_LABEL_WIDTH を解決した値）と、渡したラベルの最長の
+# うち大きいほう。節のラベルがそろっていれば、節の前に BOOCH_DOCTOR_LABEL_WIDTH をこの値にすると
+# 節全体の状態列が揃う。長さは printf の %-*s に合わせてバイト数で数える。
+booch_doctor_labels_width() { # label...
+  local LC_ALL=C w label
+  w=$(_booch_doctor_label_width)
+  for label in "$@"; do
+    [ "${#label}" -gt "$w" ] && w=${#label}
+  done
+  printf '%s' "$w"
+}
+
+# path の $HOME を ~ に短縮して変数 var へ入れる（booch_doctor_symlinks の表示用）。幅の計算と
+# 描画で同じ規則を使うため 1 か所にまとめる。printf -v で代入し、1 件ごとの fork を避ける。
+_booch_doctor_tilde() { # var path
+  printf -v "$1" '%s' "${2/#$HOME/\~}"
+}
+
+# booch_doctor_symlinks が使うラベル列の幅を返す（ラベルは dest の $HOME を ~ に短縮したもの）。
+# 同じ節で booch_doctor_row の行も揃えたい利用側は、節の前に BOOCH_DOCTOR_LABEL_WIDTH を
+# この値にする。
+booch_doctor_symlinks_width() { # "src|dest"...
+  local pair label labels=()
+  for pair in "$@"; do
+    _booch_doctor_tilde label "${pair#*|}"
+    labels+=("$label")
+  done
+  booch_doctor_labels_width "${labels[@]}"
+}
+
 # symlink 配置の診断。各引数は "src|dest"（利用側が配置一覧を渡す）。dest が期待どおり src を
 # 指す symlink かを見て、実体上書き・リンク切れ・宛先ずれ・未配置を warn で可視化する。配置は
 # 再実行で冪等に直る前提なので、未配置でも missing（終了 1）にはせず warn にとどめる。ラベルは
-# dest（$HOME を ~ に短縮）。src / dest に `|` を含む用途は想定しない。
+# dest（$HOME を ~ に短縮）。src / dest に `|` を含む用途は想定しない。ラベル列の幅は
+# booch_doctor_symlinks_width に広げて描画する（関数内だけで、呼び出し後は元の幅に戻る）。
 booch_doctor_symlinks() { # "src|dest"...
-  local pair src dest label
+  local pair src dest label src_label w
+  # 幅は local 宣言より前に計算する（宣言した時点で関数内では未設定になり、呼び出し側の幅が
+  # 見えなくなるため）。
+  w=$(booch_doctor_symlinks_width "$@")
+  local BOOCH_DOCTOR_LABEL_WIDTH=$w
   for pair in "$@"; do
     src=${pair%%|*}; dest=${pair#*|}
-    label="${dest/#$HOME/\~}"
+    _booch_doctor_tilde label "$dest"
     if [ -L "$dest" ]; then
       if [ ! -e "$dest" ]; then
         booch_doctor_row "$label" warn "リンク切れ（→ $(readlink "$dest")）"
       elif [ "$(readlink -f "$dest")" = "$(readlink -f "$src")" ]; then
-        booch_doctor_row "$label" ok "→ ${src/#$HOME/\~}"
+        _booch_doctor_tilde src_label "$src"
+        booch_doctor_row "$label" ok "→ $src_label"
       else
         booch_doctor_row "$label" warn "別実体を指す（→ $(readlink -f "$dest")）"
       fi
