@@ -5,6 +5,16 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `lib/state.sh` を足した。宣言と現状を畳んだハッシュが前回と変わったときだけ、または前回から
+  一定時間が過ぎたときだけ処理を走らせるための状態記録（chezmoi の `run_onchange_` /
+  `refreshPeriod` 相当）。公開 API は `booch_hash_args` / `booch_state_changed` /
+  `booch_state_record` / `booch_state_fresh` / `booch_state_touch`。記録の置き場は
+  `BOOCH_STATE_DIR`（未設定なら `${XDG_CACHE_HOME:-$HOME/.cache}/booch/state`）。lib は export
+  しないので、既定を変えてジョブからも使う利用側は自分で export する。記録ファイル名は id を
+  パーセントエンコードしたもの。
+
 ## [1.14.0] - 2026-09-17
 
 ### Changed

@@ -61,6 +61,7 @@ booch/
 │   ├── git.sh                    # 自己更新（pull→再exec）/ 複数リポジトリの ff-only pull
 │   ├── cleanup.sh                # cleanup フレーム（コマンド実行表示 / 解放量 / docker prune 安全・深い）
 │   ├── autoremove.sh             # 宣言外実体の掃除ドライバ（実体一覧 vs desired 集合の差分計算）
+│   ├── state.sh                  # 変わったときだけ / 一定期間ごとに処理を走らせるための状態記録
 │   ├── wsl.sh                    # WSL 判定 / binfmt interop 診断 / systemd 有効化
 │   ├── docker.sh                 # docker post-install（グループ / デーモン）+ daemon.json のキー単位更新
 │   └── scaffold.sh               # 利用側 dotfiles 雛形の生成（booch init の実体）
@@ -96,7 +97,7 @@ WSL2 / Ubuntu を主対象とする。BSD / macOS の `readlink` と `timeout` �
 非互換のため、そのままでは動かない。
 
 一部のライブラリは追加で次を使う: `lib/github.sh` は `curl` と `jq`、`lib/verify.sh` は
-`curl` と `sha256sum`、`lib/apt.sh` は `curl` / `gpg` / `dpkg` / `sudo`、`jobs/` の各
+`curl` と `sha256sum`、`lib/state.sh` は `sha256sum`、`lib/apt.sh` は `curl` / `gpg` / `dpkg` / `sudo`、`jobs/` の各
 ジョブは対象ツールの取得に `curl` 等。
 
 booch 本体（`bin/booch` / `install.sh` / 各スクリプト）は `#!/usr/bin/env bash` を持ち、
