@@ -5,6 +5,14 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Fixed
+
+- `booch_claude_marketplace_list` が、未登録の marketplace も登録済みとして返していた。
+  `claude plugin marketplace list` の "From claude.ai:" 節は、アカウントから追加できるものを "not added" で出す。
+  利用側の autoremove はこれを候補に出し、消しても登録されていないので毎回候補に戻っていた。
+  `plugin list` / `marketplace list` の共通パーサが、最初の節（導入済み・登録済みの一覧）の行だけを
+  拾うようにした。節は見出しの文言ではなく、インデントの無い行で区切る。
+
 ## [1.16.0] - 2026-09-24
 
 ### Added

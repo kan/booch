@@ -383,6 +383,28 @@ test_claude_marketplace_list_returns_names() {
   assert_eq 'acme
 openai-codex' "$(booch_claude_marketplace_list)"
 }
+# 見出し付きの出力では最初の節（登録済み）だけを返す。後ろの節に並ぶ未登録の marketplace
+# （"From claude.ai:" の "not added"）を登録済みと数えない。
+test_claude_marketplace_list_ignores_sections_after_first() {
+  booch_claude_run() {
+    case "$*" in "plugin marketplace list") printf '%s\n' \
+      'Configured marketplaces:' '' \
+      '  ❯ acme' '    Source: GitHub (acme/plugins)' '' \
+      '  ❯ openai-codex' '    Source: GitHub (openai/codex-plugin-cc)' '' \
+      'From claude.ai:' '' \
+      '  ❯ claudeai-my-uploads (listed as "My Uploads") — hosted on claude.ai, your uploads · not added' \
+      '    Add: claude plugin marketplace add --claudeai claudeai-my-uploads' ;; esac
+  }
+  assert_eq 'acme
+openai-codex' "$(booch_claude_marketplace_list)"
+}
+test_claude_plugin_list_with_heading_returns_names() {
+  booch_claude_run() {
+    case "$*" in "plugin list") printf '%s\n' \
+      'Installed plugins:' '' '  ❯ acme-tools@acme' '    Version: 1.0.0' ;; esac
+  }
+  assert_eq 'acme-tools@acme' "$(booch_claude_plugin_list)"
+}
 test_claude_plugin_uninstall_invokes_command() {
   local cap=""
   booch_claude_run() { cap="$*"; }

@@ -203,8 +203,18 @@ booch_claude_plugin_ensure() { # plugin@source -> "<status>\t<old>\t<new>"
 # plugin list / marketplace list は先頭に "❯" マーカー付きで name が 2 列目に出る。その name
 # だけを 1 行ずつ返す共通パーサ（"❯" は UTF-8 の e2 9d af）。CLI 出力書式に依存する薄い層で、
 # 利用側の autoremove / 診断がこの 1 箇所を共有する（各所で同じ awk を書かない）。
+#
+# 拾うのは**最初の節**の行だけ。出力はインデントの無い見出し（"Installed plugins:" /
+# "Configured marketplaces:"）で節に分かれ、最初の節が導入済み・登録済みの一覧になる。後ろの節には
+# 未登録のものも並ぶ（marketplace list の "From claude.ai:" は、アカウントから追加できる
+# marketplace を "not added" で出す）。全節を拾うと、未登録のものを登録済みと数え、autoremove が
+# 消しても毎回候補に戻る。見出しの文言には依存せず、2 つ目の見出しが来たら打ち切る。見出しの無い
+# 出力（古い CLI）は全体が 1 つの節として扱われる。
 _booch_claude_marked_names() { # claude-subcommand...
-  booch_claude_run "$@" 2>/dev/null | awk '$1=="\xe2\x9d\xaf"{print $2}'
+  booch_claude_run "$@" 2>/dev/null | awk '
+    /^[^ \t]/          { if (++sections > 1) exit }
+    $1=="\xe2\x9d\xaf" { print $2 }
+  '
 }
 
 # 導入済みプラグイン名（plugin@source）を 1 行ずつ返す。
