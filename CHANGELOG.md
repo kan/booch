@@ -5,6 +5,26 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `booch_cleanup_docker_volumes_prune [assume_yes] [cache_glob...]`（`lib/cleanup.sh`）: どの
+  コンテナからも参照されていない volume のうち、消しても再作成で戻るものを削除する。
+  - 匿名 volume（名前が 64 桁の hex か、`com.docker.volume.anonymous` ラベル付き）は削除する
+  - 名前が `cache_glob`（bash のパターン。例: `'*node-modules'`）のどれかに一致する volume は削除する
+  - それ以外の名前付き volume は DB のデータを含みうるので消さず、名前と大きさを表示する
+  - 消す前に一覧と回収見込みを出して y/N 確認を挟む（`assume_yes` で省略。非対話では見送り）。
+    匿名 volume は出どころがラベルに残らないので、短縮 ID / 大きさ / 作成日時を新しい順に出す
+  - `docker volume prune` は Docker 23 未満だと名前付きも消すので使わず、名前を指定して消す
+- `booch_cleanup_docker_volume_rows`（`lib/cleanup.sh`）: volume ごとの
+  "Name|Links|Size|Labels" を返す。上の判定の継ぎ目
+- `booch_cleanup_docker_volume_created name...`（`lib/cleanup.sh`）: volume ごとの
+  "Name|CreatedAt" を返す。匿名 volume の一覧表示の継ぎ目
+
+### Changed
+
+- `booch_cleanup_docker_prune_deep` の末尾に出していた volume の手動削除の案内をやめた。
+  消してよい volume の選別と削除は `booch_cleanup_docker_volumes_prune` が行う
+
 ## [1.16.1] - 2026-09-24
 
 ### Fixed

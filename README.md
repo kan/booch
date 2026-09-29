@@ -59,7 +59,7 @@ booch/
 │   ├── sudo.sh                   # 並列ジョブ向け sudo 事前キャッシュ + キープアライブ
 │   ├── fs.sh                     # symlink 配置 / TOML キーの冪等更新 / 壊れリンクの検出と削除
 │   ├── git.sh                    # 自己更新（pull→再exec）/ 複数リポジトリの ff-only pull
-│   ├── cleanup.sh                # cleanup フレーム（コマンド実行表示 / 解放量 / docker prune 安全・深い）
+│   ├── cleanup.sh                # cleanup フレーム（コマンド実行表示 / 解放量 / docker prune 安全・深い / 未使用 volume）
 │   ├── autoremove.sh             # 宣言外実体の掃除ドライバ（実体一覧 vs desired 集合の差分計算）
 │   ├── state.sh                  # 変わったときだけ / 一定期間ごとに処理を走らせるための状態記録
 │   ├── wsl.sh                    # WSL 判定 / binfmt interop 診断 / systemd 有効化
