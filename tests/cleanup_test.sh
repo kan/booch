@@ -166,11 +166,55 @@ test_volumes_prune_removes_anonymous_and_cache() {
   local out; out=$(booch_cleanup_docker_volumes_prune true '*node-modules' '*[_-]cache')
   assert_eq "$_ANON app_go-build-cache app_node-modules labelled-anon " "$(_removed)"
   assert_contains "$out" "匿名 volume 2 個 74.9MB"
-  assert_contains "$out" "キャッシュ volume 2 個 2.00GB"
+  assert_contains "$out" "名前付き volume 2 個 2.00GB"
   # 残すものは名前と大きさを表示する。
   assert_contains "$out" "残す未使用 volume"
   assert_contains "$out" "app_mysql-data"
   assert_not_contains "$out" "used_node-modules"
+}
+
+# orphan: の glob は、compose のプロジェクトが見当たらない volume だけを消す。生きている
+# プロジェクトの依存と、見当たらないプロジェクトのデータは残し、後者には注記を付ける。
+test_volumes_prune_orphan_only_when_project_gone() {
+  _docker_volume_available
+  booch_cleanup_docker_volume_rows() {
+    printf '%s\n' \
+      "live_node-modules|0|1GB|com.docker.compose.project=live,com.docker.compose.volume=node-modules" \
+      "tmp-1_e2e-node-modules|0|17MB|com.docker.compose.config-hash=x,com.docker.compose.project=tmp-1" \
+      "tmp-1_mysql-data|0|5MB|com.docker.compose.project=tmp-1" \
+      "nolabel_node-modules|0|3MB|"
+  }
+  booch_cleanup_docker_project_alive() { [ "$1" != tmp-1 ]; }
+  local out; out=$(booch_cleanup_docker_volumes_prune true 'orphan:*node-modules')
+  assert_eq "tmp-1_e2e-node-modules " "$(_removed)"
+  assert_contains "$out" "プロジェクト tmp-1 が見当たらない"
+  assert_contains "$(grep 'tmp-1_mysql-data' <<<"$out")" "見当たらない"
+}
+
+# orphan: を渡したのに探す場所が未設定なら、その旨を出して orphan: の volume は消さない。
+test_volumes_prune_orphan_without_roots_warns() {
+  _docker_volume_available
+  booch_cleanup_docker_volume_rows() { echo "tmp-1_node-modules|0|17MB|com.docker.compose.project=tmp-1"; }
+  BOOCH_CLEANUP_PROJECT_ROOTS=
+  local out; out=$(booch_cleanup_docker_volumes_prune true 'orphan:*node-modules')
+  assert_contains "$out" "BOOCH_CLEANUP_PROJECT_ROOTS が未設定"
+  assert_eq "" "$(_removed)"
+}
+
+# プロジェクトの生死: 探す場所（glob 可）の直下に同名のディレクトリがあれば生きている。
+# 探す場所が未設定なら、消し過ぎないよう生きている扱い。
+test_project_alive_searches_roots() {
+  local d; d=$(mktemp -d)
+  mkdir -p "$d/top" "$d/group/nested" "$d/My.App"
+  BOOCH_CLEANUP_PROJECT_ROOTS="$d:$d/*"
+  booch_cleanup_docker_project_alive top || fail "直下が見つからない"
+  booch_cleanup_docker_project_alive nested || fail "1 段下が見つからない"
+  # compose と同じ正規化（小文字化、[a-z0-9_-] 以外の除去）をしたディレクトリ名とも比べる。
+  booch_cleanup_docker_project_alive myapp || fail "正規化した名前で見つからない"
+  if booch_cleanup_docker_project_alive gone; then fail "無いものを生きていると判定"; fi
+  BOOCH_CLEANUP_PROJECT_ROOTS=
+  booch_cleanup_docker_project_alive gone || fail "未設定なら生きている扱いのはず"
+  rm -rf "$d"
 }
 
 # 匿名 volume は短縮 ID / 大きさ / 作成日時を新しい順に出す（どれを消すか判断できるように）。

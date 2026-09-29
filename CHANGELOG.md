@@ -5,6 +5,23 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `booch_cleanup_docker_volumes_prune` が `orphan:<glob>` を受け付けるようにした。一致する volume は、
+  compose のプロジェクトが見当たらないときだけ削除する。node_modules のように、消すと install し直しに
+  なる依存を想定している。作業中のプロジェクトのものは残し、消した worktree や使い捨て環境の残骸だけを
+  消す。プロジェクトが見当たらない名前付き volume のうち消さないものには、一覧でその旨を添える
+- `booch_cleanup_docker_project_alive project`（`lib/cleanup.sh`）: 上の生死の判定。
+  `BOOCH_CLEANUP_PROJECT_ROOTS`（`:` 区切りで、各要素は glob）のどれかの直下に、プロジェクト名と同じ名前の
+  ディレクトリがあれば生きているとみなす。ディレクトリ名は compose と同じ規則（小文字化と
+  `[a-z0-9_-]` 以外の除去）で正規化して比べる。探す場所の下は 1 回だけ走査する。
+  未設定なら常に生きている扱いで、`orphan:` を渡していればその旨を表示する（`orphan:` の volume は消さない）
+
+### Changed
+
+- `booch_cleanup_docker_volumes_prune` の表示で、削除候補の名前付き volume を「キャッシュ」ではなく
+  「名前付き」とまとめ、消す理由を各行に添えるようにした
+
 ## [1.17.0] - 2026-09-29
 
 ### Added
