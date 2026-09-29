@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-09-29
+
 ### Added
 
 - `booch_cleanup_docker_volumes_prune` が `orphan:<glob>` を受け付けるようにした。一致する volume は、
@@ -587,7 +589,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/kan/booch/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/kan/booch/compare/v1.16.1...v1.17.0
 [1.16.1]: https://github.com/kan/booch/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/kan/booch/compare/v1.15.0...v1.16.0
