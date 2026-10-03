@@ -379,15 +379,20 @@ test_claude_plugin_list_returns_names() {
 codex@openai-codex' "$(booch_claude_plugin_list)"
 }
 test_claude_marketplace_list_returns_names() {
-  booch_claude_run() { case "$*" in "plugin marketplace list") printf '  ❯ acme\n  ❯ openai-codex\n' ;; esac; }
+  booch_claude_run() {
+    case "$*" in "plugin marketplace list --json")
+      printf '[{"name":"acme","source":"github"},{"name":"openai-codex","source":"github"}]\n' ;; esac
+  }
   assert_eq 'acme
 openai-codex' "$(booch_claude_marketplace_list)"
 }
-# 見出し付きの出力では最初の節（登録済み）だけを返す。後ろの節に並ぶ未登録の marketplace
-# （"From claude.ai:" の "not added"）を登録済みと数えない。
-test_claude_marketplace_list_ignores_sections_after_first() {
+# `--json` を持たない古い CLI では表示用の出力から拾う。見出し付きの出力では最初の節（登録済み）
+# だけを返し、後ろの節に並ぶ未登録の marketplace（"From claude.ai:" の "not added"）を数えない。
+test_claude_marketplace_list_falls_back_without_json() {
   booch_claude_run() {
-    case "$*" in "plugin marketplace list") printf '%s\n' \
+    case "$*" in
+    "plugin marketplace list --json") return 1 ;;
+    "plugin marketplace list") printf '%s\n' \
       'Configured marketplaces:' '' \
       '  ❯ acme' '    Source: GitHub (acme/plugins)' '' \
       '  ❯ openai-codex' '    Source: GitHub (openai/codex-plugin-cc)' '' \

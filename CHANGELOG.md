@@ -5,6 +5,14 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Fixed
+
+- `booch_claude_marketplace_list` が、Claude Code に組込みの marketplace（`anthropic-plugin-directory` など。
+  一覧の `Source: Built in`）も登録済みとして返していた。組込みは利用者が add したものではなく、remove しても
+  off になるだけで一覧に残るので、autoremove が毎回リスト外として候補に出していた。
+  `claude plugin marketplace list --json` の `name` を返すようにした。jq が無いか、CLI が `--json` を
+  持たないときは、これまでどおり表示用の出力から拾う
+
 ## [1.18.0] - 2026-09-29
 
 ### Added

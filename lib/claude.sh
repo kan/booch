@@ -227,9 +227,17 @@ booch_claude_plugin_uninstall() { # plugin@source
   booch_claude_run plugin uninstall "$1" >/dev/null 2>&1
 }
 
-# 登録済み marketplace 名を 1 行ずつ返す。
+# 登録済み marketplace 名を 1 行ずつ返す。`--json` は利用者が add したものだけを返す。表示用の
+# 出力は組込み（"Source: Built in"）も最初の節に並べるので、それを数えると autoremove が毎回
+# リスト外として候補に出す。jq が無いか `--json` を持たない古い CLI のときだけ表示用の出力から拾う。
 booch_claude_marketplace_list() {
-  _booch_claude_marked_names plugin marketplace list
+  local json
+  if command -v jq >/dev/null 2>&1 &&
+    json=$(booch_claude_run plugin marketplace list --json 2>/dev/null); then
+    printf '%s\n' "$json" | jq -r '.[].name'
+  else
+    _booch_claude_marked_names plugin marketplace list
+  fi
 }
 
 # marketplace を登録解除する（clone ディレクトリも消える。成功で 0）。
