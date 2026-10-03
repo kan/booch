@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-10-03
+
 ### Fixed
 
 - `booch_claude_marketplace_list` が、Claude Code に組込みの marketplace（`anthropic-plugin-directory` など。
@@ -597,7 +599,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.18.0...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.18.1...HEAD
+[1.18.1]: https://github.com/kan/booch/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/kan/booch/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/kan/booch/compare/v1.16.1...v1.17.0
 [1.16.1]: https://github.com/kan/booch/compare/v1.16.0...v1.16.1
