@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-10-07
+
 ### Fixed
 
 - `booch_claude_plugin_list` が、導入済みプラグインが 0 件のときに、セッション限定で読み込まれたプラグイン
@@ -607,7 +609,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.18.1...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.18.2...HEAD
+[1.18.2]: https://github.com/kan/booch/compare/v1.18.1...v1.18.2
 [1.18.1]: https://github.com/kan/booch/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/kan/booch/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/kan/booch/compare/v1.16.1...v1.17.0
