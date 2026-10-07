@@ -217,9 +217,19 @@ _booch_claude_marked_names() { # claude-subcommand...
   '
 }
 
-# 導入済みプラグイン名（plugin@source）を 1 行ずつ返す。
+# 導入済みプラグイン名（plugin@source）を 1 行ずつ返す。`--json` の scope で判定し、セッション限定
+# （`session`）のものは除く。`--plugin-dir` / `--plugin-url` や環境変数 CLAUDE_CODE_PLUGIN_DIRS で
+# 読み込まれたプラグインは config dir に導入されたものではなく、表示用の出力では
+# "Session-only plugins" の節に並ぶ。導入済みが 0 件だとその節が最初の節になり、「最初の節だけ」を
+# 読む表示用の解析では除けない。jq が無いか `--json` を持たない古い CLI のときだけ表示用の出力から拾う。
 booch_claude_plugin_list() {
-  _booch_claude_marked_names plugin list
+  local json
+  if command -v jq >/dev/null 2>&1 &&
+    json=$(booch_claude_run plugin list --json 2>/dev/null) && [ -n "$json" ]; then
+    printf '%s\n' "$json" | jq -r '.[] | select(.scope != "session") | .id'
+  else
+    _booch_claude_marked_names plugin list
+  fi
 }
 
 # プラグインをアンインストールする（成功で 0）。

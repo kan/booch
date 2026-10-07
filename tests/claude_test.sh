@@ -378,6 +378,37 @@ test_claude_plugin_list_returns_names() {
   assert_eq 'acme-tools@acme
 codex@openai-codex' "$(booch_claude_plugin_list)"
 }
+# `--json` の scope で判定し、セッション限定（--plugin-dir / CLAUDE_CODE_PLUGIN_DIRS）のものを除く。
+test_claude_plugin_list_excludes_session_scope() {
+  booch_claude_run() {
+    case "$*" in "plugin list --json")
+      printf '[{"id":"acme-tools@acme","scope":"user"},{"id":"codex@openai-codex","scope":"project"},{"id":"editor-mod@inline","scope":"session"}]\n' ;; esac
+  }
+  assert_eq 'acme-tools@acme
+codex@openai-codex' "$(booch_claude_plugin_list)"
+}
+# 導入済みが 0 件でセッション限定のものだけがあるとき（表示用の出力ではその節が最初の節になる）も
+# 何も返さない。
+test_claude_plugin_list_session_only_returns_nothing() {
+  booch_claude_run() {
+    case "$*" in
+    "plugin list --json") printf '[{"id":"editor-mod@inline","scope":"session"}]\n' ;;
+    "plugin list") printf '%s\n' \
+      'Session-only plugins (--plugin-dir / --plugin-url):' '' '  ❯ editor-mod@inline' '    Version: 0.1.0' ;; esac
+  }
+  assert_eq '' "$(booch_claude_plugin_list)"
+}
+# `--json` を持たない古い CLI では表示用の出力の最初の節から拾う。
+test_claude_plugin_list_falls_back_without_json() {
+  booch_claude_run() {
+    case "$*" in
+    "plugin list --json") return 1 ;;
+    "plugin list") printf '%s\n' \
+      'Installed plugins:' '' '  ❯ acme-tools@acme' '    Version: 1.0.0' '' \
+      'Session-only plugins (--plugin-dir / --plugin-url):' '' '  ❯ editor-mod@inline' '    Version: 0.1.0' ;; esac
+  }
+  assert_eq 'acme-tools@acme' "$(booch_claude_plugin_list)"
+}
 test_claude_marketplace_list_returns_names() {
   booch_claude_run() {
     case "$*" in "plugin marketplace list --json")

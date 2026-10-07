@@ -5,6 +5,14 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Fixed
+
+- `booch_claude_plugin_list` が、導入済みプラグインが 0 件のときに、セッション限定で読み込まれたプラグイン
+  （`--plugin-dir` / `--plugin-url` や環境変数 `CLAUDE_CODE_PLUGIN_DIRS` 由来）を導入済みとして返していた。
+  表示用の出力では `Session-only plugins` の節が最初の節になり、「最初の節だけ」を読む解析では除けなかった。
+  `claude plugin list --json` の `scope` で判定し、`session` を除くようにした。jq が無いか、CLI が `--json` を
+  持たないときは、これまでどおり表示用の出力から拾う
+
 ## [1.18.1] - 2026-10-03
 
 ### Fixed
