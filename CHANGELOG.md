@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-10-15
+
 ### Added
 
 - `delta` / `shellcheck` ジョブで、取得した資産の SHA256 を照合するようにした（#20）。upstream はチェックサムを
@@ -656,7 +658,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.18.2...HEAD
+[Unreleased]: https://github.com/kan/booch/compare/v1.19.0...HEAD
+[1.19.0]: https://github.com/kan/booch/compare/v1.18.2...v1.19.0
 [1.18.2]: https://github.com/kan/booch/compare/v1.18.1...v1.18.2
 [1.18.1]: https://github.com/kan/booch/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/kan/booch/compare/v1.17.0...v1.18.0
