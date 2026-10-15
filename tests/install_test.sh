@@ -35,6 +35,22 @@ test_install_clone_pulls_when_present() {
   rm -rf "$d"
 }
 
+# --- apt update（取得失敗を非 0 にして止める） ---
+test_install_apt_update_requests_error_mode_any() {
+  local cap=""
+  booch_install_apt() { cap="$*"; }
+  booch_install_apt_update
+  assert_eq "update -qq -o APT::Update::Error-Mode=any" "$cap"
+}
+test_install_prereqs_stops_before_install_when_update_fails() {
+  local installed=0 rc
+  _bi_have() { [ "$1" = gh ]; }   # git / curl が無い
+  booch_install_apt() { case "$1" in update) return 100 ;; install) installed=1 ;; esac; }
+  if booch_install_prereqs >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "0" "$installed" "update 失敗で install へ進まない"
+}
+
 # --- ensure_booch（submodule あり / sibling あり / どちらも無し→clone） ---
 test_install_ensure_booch_ok_when_submodule_present() {
   local d; d=$(mktemp -d); mkdir -p "$d/df/vendor/booch/lib"; : > "$d/df/vendor/booch/lib/runner.sh"

@@ -43,6 +43,15 @@ booch_install_gh()   { gh "$@"; }
 booch_install_git()  { git "$@"; }
 booch_install_exec() { ( cd "$1" && bash "$2" ); }   # dotfiles setup の実行
 
+# apt の index を更新する。apt-get update は一部の repo を取得できなくても 0 を返すので、
+# APT::Update::Error-Mode=any で非 0 にする（この項目を知らない古い apt では無視される）。
+# 素の OS からの bootstrap では、古い index のまま進むと後続の導入も失敗しやすいので止める
+# （lib/apt.sh の booch_apt_update と違い、続行する選択肢は持たない）。
+booch_install_apt_update() {
+  booch_install_apt update -qq -o APT::Update::Error-Mode=any \
+    || _bi_err "apt update に失敗（取得できなかった repo がある場合も含む）"
+}
+
 # 1. 前提ツール。git / curl は universe、gh は github-cli の apt repo を足してから入れる。
 booch_install_prereqs() {
   if _bi_have git && _bi_have curl && _bi_have gh; then
@@ -53,12 +62,12 @@ booch_install_prereqs() {
   _bi_have git  || base+=(git)
   _bi_have curl || base+=(curl)
   if [ "${#base[@]}" -gt 0 ]; then
-    booch_install_apt update -qq || { _bi_err "apt update に失敗"; return 1; }
+    booch_install_apt_update || return 1
     booch_install_apt install -y "${base[@]}" || { _bi_err "前提ツールの導入に失敗: ${base[*]}"; return 1; }
   fi
   if ! _bi_have gh; then
     booch_install_ensure_gh_repo || return 1
-    booch_install_apt update -qq || { _bi_err "apt update に失敗"; return 1; }
+    booch_install_apt_update || return 1
     booch_install_apt install -y gh || { _bi_err "gh の導入に失敗"; return 1; }
   fi
   _bi_ok "git / curl / gh 用意"

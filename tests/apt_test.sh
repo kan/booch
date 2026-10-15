@@ -460,12 +460,86 @@ test_apt_warn_autoremove_treats_nonnumeric_as_zero() {
 }
 
 # --- booch_apt_sync（sudo/upgrade/warn を seam で制御） ---
-test_apt_sync_returns_1_when_update_fails() {
-  sudo() { case "$2" in update) return 1 ;; *) return 0 ;; esac; }
+test_apt_sync_returns_1_when_update_fails_in_strict() {
+  BOOCH_APT_UPDATE_ERROR_MODE=strict
+  local installed=0
+  sudo() { case "$2" in update) return 100 ;; install) installed=1 ;; esac; }
   booch_apt_upgrade() { return 0; }
   booch_apt_warn_autoremove() { return 0; }
   local rc; if booch_apt_sync git >/dev/null 2>&1; then rc=0; else rc=$?; fi
   assert_status 1 "$rc"
+  assert_eq "0" "$installed" "strict では install へ進まない"
+}
+
+# warn では取得失敗（Error-Mode 付きだけ失敗し、素の update は通る）を警告して続行する（#19）。
+test_apt_sync_warns_and_continues_on_fetch_failure_in_warn() {
+  BOOCH_APT_UPDATE_ERROR_MODE=warn
+  local installed=0 errf; errf=$(mktemp)
+  sudo() { case "$*" in *Error-Mode*) return 100 ;; *install*) installed=1 ;; esac; }
+  booch_apt_upgrade() { return 0; }
+  booch_apt_warn_autoremove() { return 0; }
+  # $() で受けると installed の更新がサブシェルに閉じるので、stderr はファイルで受ける。
+  local rc; if booch_apt_sync git >/dev/null 2>"$errf"; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_eq "1" "$installed" "warn では install まで進む"
+  assert_contains "$(cat "$errf")" "[WARN]"
+  rm -f "$errf"
+}
+
+# warn でも、素の update まで失敗する致命的な失敗（Release 無し / ロック等）は従来どおり止める。
+test_apt_sync_returns_1_on_fatal_update_failure_in_warn() {
+  BOOCH_APT_UPDATE_ERROR_MODE=warn
+  local installed=0
+  sudo() { case "$2" in update) return 100 ;; install) installed=1 ;; esac; }
+  booch_apt_upgrade() { return 0; }
+  booch_apt_warn_autoremove() { return 0; }
+  local rc; if booch_apt_sync git >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "0" "$installed" "致命的な失敗では install へ進まない"
+}
+
+# 外から strict が export されていても既定値の検証が揺れないよう、unset して既定を読み直す。
+test_apt_update_mode_defaults_to_warn() {
+  unset BOOCH_APT_UPDATE_ERROR_MODE
+  # shellcheck source=lib/apt.sh
+  source "$BOOCH_ROOT/lib/apt.sh"
+  assert_eq "warn" "$BOOCH_APT_UPDATE_ERROR_MODE"
+}
+
+# apt-get update は取得失敗を既定で 0 にするので、Error-Mode=any を必ず渡す。
+# --error-on=any ではなく -o で渡す（古い apt でも update 自体を失敗させない）。
+test_apt_update_requests_error_mode_any() {
+  local cap=""
+  sudo() { cap="$*"; }
+  booch_apt_update
+  assert_eq "apt-get update -o APT::Update::Error-Mode=any" "$cap"
+}
+
+# モード値の誤りは update の成否に関わらず、apt を呼ぶ前に弾く。
+test_apt_update_rejects_unknown_mode_before_running_apt() {
+  BOOCH_APT_UPDATE_ERROR_MODE=Strict
+  local called=0
+  sudo() { called=1; }
+  local rc; if booch_apt_update 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 2 "$rc"
+  assert_eq "0" "$called"
+}
+
+test_apt_install_continues_after_fetch_failure_in_warn() {
+  BOOCH_APT_UPDATE_ERROR_MODE=warn
+  local cap=""
+  sudo() { case "$*" in *Error-Mode*) return 100 ;; *install*) cap="$*" ;; esac; }
+  booch_apt_install curl 2>/dev/null
+  assert_eq "apt-get install -y curl" "$cap"
+}
+
+test_apt_install_stops_on_update_failure_in_strict() {
+  BOOCH_APT_UPDATE_ERROR_MODE=strict
+  local installed=0
+  sudo() { case "$2" in update) return 100 ;; install) installed=1 ;; esac; }
+  local rc; if booch_apt_install curl 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "0" "$installed"
 }
 
 test_apt_sync_returns_1_when_install_fails() {

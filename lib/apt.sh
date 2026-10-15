@@ -23,9 +23,18 @@
 #   booch_apt_install_key <url> <keyring> <mode>  鍵取得と keyring 配置（mode: dearmor|raw）
 #   booch_apt_write_list  <name> <deb-line>       sources.list.d/<name>.list 生成
 #   booch_apt_keyring_records <keyring>           keyring の鍵レコード（gpg コロン形式）
+#
+# apt-get update で一部の index を取得できなかったときの扱いは
+# BOOCH_APT_UPDATE_ERROR_MODE で選ぶ（booch_apt_update / booch_apt_sync / booch_apt_install）:
+#   warn（既定）  [WARN] を出し、古い index のまま続行する
+#   strict        非 0 を返す（caller の `|| halt` で止める）
+# Release 無しやロック失敗など、もともと update が非 0 になる失敗はどちらでも非 0 を返す。
 
 # sources.list.d の場所（テストで temp に差し替えられる）。
 : "${BOOCH_APT_SOURCES_DIR:=/etc/apt/sources.list.d}"
+
+# apt-get update の取得失敗の扱い（warn|strict。上の冒頭コメント参照）。
+: "${BOOCH_APT_UPDATE_ERROR_MODE:=warn}"
 
 # 署名鍵を期限切れの何日前から取り直すか。0 にすると「切れてから」になる。上流は
 # 期限前に新鍵を足した keyring へ差し替えるのが通例なので、既定は前倒しにしてある。
@@ -212,9 +221,29 @@ booch_apt_pkg_installed() { # pkg
   dpkg -s "$1" >/dev/null 2>&1
 }
 
+# apt の index を更新する。apt-get update は取得に失敗した repo があっても既定では
+# 警告だけで 0 を返すので、APT::Update::Error-Mode=any で非 0 にして検出する。
+# `--error-on=any` ではなく -o で渡すのは、この項目を知らない古い apt でも update 自体を
+# 失敗させないため（未知の -o は無視され、従来どおり検出なしで動く）。
+# 終了コードでは取得失敗と致命的な失敗（Release 無し / ロック / sudo 等）を区別できない
+# ので、warn では Error-Mode 無しで update をやり直す。それも失敗すれば致命的（従来どおり
+# 非 0）、通れば取得失敗だけだったとみなして警告して続行する。
+booch_apt_update() {
+  case "$BOOCH_APT_UPDATE_ERROR_MODE" in
+    strict | warn) ;;
+    *) echo "apt: 未知の BOOCH_APT_UPDATE_ERROR_MODE: $BOOCH_APT_UPDATE_ERROR_MODE（warn|strict）" >&2
+       return 2 ;;
+  esac
+  sudo apt-get update -o APT::Update::Error-Mode=any && return 0
+  [ "$BOOCH_APT_UPDATE_ERROR_MODE" = warn ] || return 1
+  sudo apt-get update || return 1
+  printf '%s[WARN]%s apt-get update で一部の index を取得できませんでした。古い index のまま続行します（止めるには BOOCH_APT_UPDATE_ERROR_MODE=strict）\n' \
+    "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" >&2
+}
+
 # 不足分をまとめて導入する（seam。update してから install する）。
 booch_apt_install() { # pkg...
-  sudo apt-get update && sudo apt-get install -y "$@"
+  booch_apt_update && sudo apt-get install -y "$@"
 }
 
 # 指定パッケージのうち未導入のものだけを導入する。全て導入済みなら apt を呼ばない
@@ -255,13 +284,14 @@ booch_apt_warn_autoremove() {
 # 色（color.sh 未 source でも set -u を巻き込まないよう空で用意する。add_ppa の警告で使う）。
 : "${_BOOCH_COLOR_YELLOW:=}" "${_BOOCH_COLOR_RESET:=}"
 
-# apt を更新し必須パッケージを導入する。update / install の失敗は致命的（非 0 を返す）、
+# apt を更新し必須パッケージを導入する。install の失敗は致命的（非 0 を返す）、update の
+# 失敗は BOOCH_APT_UPDATE_ERROR_MODE に従う（既定の warn は続行、strict は非 0）。
 # upgrade は best-effort（一部失敗しても続行）。最後に autoremove 警告を出す（戻り値には
 # 影響しない）。どのパッケージを入れるかは利用側が決める。
-# 注意: update/install 失敗で非 0 を返すので、caller は `booch_apt_sync ... || halt` で受ける。
+# 注意: 失敗で非 0 を返すので、caller は `booch_apt_sync ... || halt` で受ける。
 booch_apt_upgrade() { sudo apt-get upgrade -y; }   # seam
 booch_apt_sync() { # pkg...
-  sudo apt-get update || return 1
+  booch_apt_update || return 1
   booch_apt_upgrade || echo "  [WARN] apt upgrade に一部失敗しました（続行します）" >&2
   sudo apt-get install -y "$@" || return 1
   booch_apt_warn_autoremove || true

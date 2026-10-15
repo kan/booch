@@ -5,6 +5,17 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Fixed
+
+- `apt-get update` が一部の repo の index を取得できなくても終了コード 0 を返すため、`booch_apt_sync` /
+  `booch_apt_install` と `install.sh` が取得失敗に気付けなかった（#19）。`-o APT::Update::Error-Mode=any`
+  を渡して検出するようにした。この項目を知らない古い apt では無視され、これまでどおり動く
+  - `booch_apt_sync` / `booch_apt_install` は、検出したときの扱いを環境変数 `BOOCH_APT_UPDATE_ERROR_MODE` で
+    選べる。既定の `warn` は `[WARN]` を出し、古い index のまま続行する（一時的な不調で setup 全体を止めない）。
+    `strict` にすると非 0 を返す。Release が無い、ロックを取れないといった、もともと update が非 0 になる
+    失敗は、`warn` でもこれまでどおり非 0 を返す。update の処理は `booch_apt_update` として公開した
+  - `install.sh` は取得に失敗した時点で止まる（素の OS では、古い index のまま進むと後続の導入も失敗しやすいため）
+
 ## [1.18.2] - 2026-10-07
 
 ### Fixed
