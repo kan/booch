@@ -180,4 +180,116 @@ test_aws_ssm_install_uses_arch_dir_in_url() {
   assert_eq "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_arm64/session-manager-plugin.deb" "$cap_url"
 }
 
+# --- AWS CLI の古い版（temp の導入先 / proc_exes をスタブ） ---
+# 導入先に版ディレクトリを作る。current は最後の版を指し、その bin/aws は version_output を名乗る。
+_aws_root() { # version_output ver...
+  local out=$1 v; shift
+  BOOCH_AWS_CLI_ROOT=$(mktemp -d)
+  for v in "$@"; do mkdir -p "$BOOCH_AWS_CLI_ROOT/$v/bin"; done
+  printf '#!/bin/sh\necho "%s Python/3.13"\n' "$out" > "$BOOCH_AWS_CLI_ROOT/$v/bin/aws"
+  chmod +x "$BOOCH_AWS_CLI_ROOT/$v/bin/aws"
+  ln -s "$BOOCH_AWS_CLI_ROOT/$v" "$BOOCH_AWS_CLI_ROOT/current"
+  # 走査できた状態（少なくとも自分のシェルは読める）を既定にする。
+  booch_aws_proc_exes() { echo /usr/bin/bash; }
+}
+
+test_aws_cli_stale_lists_versions_other_than_current() {
+  _aws_root aws-cli/2.38.1 2.37.0 2.38.0 2.38.1
+  assert_eq "$BOOCH_AWS_CLI_ROOT/2.37.0
+$BOOCH_AWS_CLI_ROOT/2.38.0" "$(booch_aws_cli_stale_versions)"
+  rm -rf "$BOOCH_AWS_CLI_ROOT"
+}
+# 壊れた導入（current の aws が自分の版を名乗らない）の上では何も消さない。
+test_aws_cli_stale_empty_when_current_is_broken() {
+  _aws_root "" 2.37.0 2.38.1
+  assert_eq "" "$(booch_aws_cli_stale_versions)"
+  rm -rf "$BOOCH_AWS_CLI_ROOT"
+}
+test_aws_cli_stale_empty_without_current() {
+  BOOCH_AWS_CLI_ROOT=$(mktemp -d); mkdir -p "$BOOCH_AWS_CLI_ROOT/2.37.0"
+  assert_eq "" "$(booch_aws_cli_stale_versions)"
+  rm -rf "$BOOCH_AWS_CLI_ROOT"
+}
+# x.y.z 以外の名前と symlink には触らない。
+test_aws_cli_stale_ignores_non_version_names_and_symlinks() {
+  _aws_root aws-cli/2.38.1 2.38.1
+  mkdir -p "$BOOCH_AWS_CLI_ROOT/backup" "$BOOCH_AWS_CLI_ROOT/2.38.0-rc"
+  local other; other=$(mktemp -d)
+  ln -s "$other" "$BOOCH_AWS_CLI_ROOT/2.30.0"
+  assert_eq "" "$(booch_aws_cli_stale_versions)"
+  rm -rf "$BOOCH_AWS_CLI_ROOT" "$other"
+}
+# 実行中のプロセスが使っている版は残す（開いたままの aws ssm start-session 等）。
+test_aws_cli_stale_keeps_versions_in_use() {
+  _aws_root aws-cli/2.38.1 2.37.0 2.38.0 2.38.1
+  booch_aws_proc_exes() { printf '/usr/bin/bash\n%s/2.37.0/dist/aws\n' "$BOOCH_AWS_CLI_ROOT"; }
+  assert_eq "$BOOCH_AWS_CLI_ROOT/2.38.0" "$(booch_aws_cli_stale_versions)"
+  rm -rf "$BOOCH_AWS_CLI_ROOT"
+}
+# 削除側は sudo 付きで /proc を読み、root のプロセスが使う版も外す。
+test_aws_cli_prune_reads_proc_with_sudo_and_removes() {
+  _aws_root aws-cli/2.38.1 2.37.0 2.38.1
+  # スタブは stale_versions の中から呼ばれ、そこでの local d に隠れるので別名にする。
+  local capdir; capdir=$(mktemp -d)
+  booch_aws_proc_exes() { echo "${1:-}" > "$capdir/proc_arg"; echo /usr/bin/bash; }
+  sudo() { "$@"; }
+  booch_aws_cli_prune >/dev/null
+  assert_eq "sudo" "$(cat "$capdir/proc_arg")"
+  assert_file_absent "$BOOCH_AWS_CLI_ROOT/2.37.0"
+  [ -d "$BOOCH_AWS_CLI_ROOT/2.38.1" ] || { echo "current の版まで消した" >&2; return 1; }
+  rm -rf "$BOOCH_AWS_CLI_ROOT" "$capdir"
+}
+# /proc を読めない（sudo の拒否など）ときは「使用中なし」と取り違えず、何も消さない（fail-closed）。
+test_aws_cli_stale_fails_closed_when_proc_unreadable() {
+  _aws_root aws-cli/2.38.1 2.37.0 2.38.1
+  booch_aws_proc_exes() { :; }
+  local out rc
+  if out=$(booch_aws_cli_stale_versions sudo 2>/dev/null); then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "" "$out"
+  rm -rf "$BOOCH_AWS_CLI_ROOT"
+}
+# 読めないプロセスは find -printf '%l' で空行になる。空行しか無ければ読めていない。
+test_aws_cli_stale_fails_closed_when_proc_gives_only_blank_lines() {
+  _aws_root aws-cli/2.38.1 2.37.0 2.38.1
+  booch_aws_proc_exes() { printf '\n\n\n'; }
+  local rc; if booch_aws_cli_stale_versions sudo >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  rm -rf "$BOOCH_AWS_CLI_ROOT"
+}
+test_aws_cli_prune_removes_nothing_when_proc_unreadable() {
+  _aws_root aws-cli/2.38.1 2.37.0 2.38.1
+  booch_aws_proc_exes() { :; }
+  sudo() { "$@"; }
+  local rc; if booch_aws_cli_prune >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  [ -d "$BOOCH_AWS_CLI_ROOT/2.37.0" ] || { echo "使用中か判定できない版を消した" >&2; return 1; }
+  rm -rf "$BOOCH_AWS_CLI_ROOT"
+}
+# current が壊れていれば、sudo の要る /proc の走査をしない。
+test_aws_cli_stale_skips_proc_scan_when_current_is_broken() {
+  _aws_root "" 2.37.0 2.38.1
+  local capdir; capdir=$(mktemp -d)
+  booch_aws_proc_exes() { : > "$capdir/scanned"; echo /usr/bin/bash; }
+  booch_aws_cli_stale_versions sudo >/dev/null
+  assert_file_absent "$capdir/scanned"
+  rm -rf "$BOOCH_AWS_CLI_ROOT" "$capdir"
+}
+test_aws_cli_prune_noop_without_stale() {
+  _aws_root aws-cli/2.38.1 2.38.1
+  local called=0
+  sudo() { called=1; }
+  booch_aws_cli_prune >/dev/null
+  assert_eq "0" "$called"
+  rm -rf "$BOOCH_AWS_CLI_ROOT"
+}
+# find は読めないプロセスがあると非 0 で終わるが、読めた分を使い、set -e の下でも止まらない。
+test_aws_proc_exes_tolerates_find_failure() {
+  find() { echo /x/2.37.0/dist/aws; return 1; }
+  local out rc
+  if out=$(set -e; booch_aws_proc_exes); then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_eq "/x/2.37.0/dist/aws" "$out"
+}
+
 run_tests

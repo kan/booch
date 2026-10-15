@@ -7,6 +7,16 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ### Added
 
+- `jobs/aws.sh` に、AWS CLI v2 の古い版のディレクトリを削除する関数を足した（#22）。公式インストーラの
+  `install --update` は前の版（1 版 約 270MB）を `/usr/local/aws-cli/v2/` に残すので、`job_aws` で更新する
+  たびに溜まっていた
+  - `booch_aws_cli_prune`: `current` 以外の使われていない版を sudo で削除する。初回の削除が大きく
+    ジョブのタイムアウトに掛かりうるので、`job_aws` の中では消さない。利用側の cleanup から呼ぶ
+  - `booch_aws_cli_stale_versions`: 削除してよい版を 1 行ずつ出す（doctor などの表示用）。`current` の aws が
+    自分の版を名乗るときだけ候補を出し、実行中のプロセスが使っている版と、x.y.z 以外の名前や symlink は
+    候補にしない。`/proc` を読めず使用中の版を判定できないとき（sudo の失敗など）は、候補を出さずに非 0 を返す
+  - 導入先は `BOOCH_AWS_CLI_ROOT` で変えられる（既定 `/usr/local/aws-cli/v2`）
+
 - `jobs/codex.sh` に、Codex の共有デーモン（app-server）の版を CLI に合わせる機構を足した（#21）。
   `job_codex` が CLI を更新しても、動いているデーモンは自分用の codex で古い版のまま残り、Codex が起動時に
   版のずれを警告していた
