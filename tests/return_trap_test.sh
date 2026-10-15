@@ -22,6 +22,8 @@ source "$BOOCH_ROOT/lib/apt.sh"
 source "$BOOCH_ROOT/lib/uv.sh"
 # shellcheck source=lib/claude.sh
 source "$BOOCH_ROOT/lib/claude.sh"
+# shellcheck source=lib/github.sh
+source "$BOOCH_ROOT/lib/github.sh"
 # shellcheck source=jobs/go.sh
 source "$BOOCH_ROOT/jobs/go.sh"
 # shellcheck source=jobs/delta.sh
@@ -32,6 +34,8 @@ source "$BOOCH_ROOT/jobs/codex.sh"
 source "$BOOCH_ROOT/jobs/aws.sh"
 # shellcheck source=jobs/circleci.sh
 source "$BOOCH_ROOT/jobs/circleci.sh"
+# shellcheck source=jobs/shellcheck.sh
+source "$BOOCH_ROOT/jobs/shellcheck.sh"
 
 # ネットワーク / sudo / 展開を潰すスタブ群を、呼び出した（サブ）シェルに定義する。
 # 個々の install 関数が間接的に呼ぶだけなので shellcheck からは到達不能に見える（SC2317）。
@@ -51,6 +55,8 @@ _rt_stubs() {
   bash() { return 0; }
   dpkg() { return 1; }   # 既存パッケージ無し扱い
   booch_github_download_asset() { return 0; }
+  # digest の照合で止まると、その後ろ（パージ / 導入）を通らず回帰ガードにならない。
+  booch_github_verify_asset() { return 0; }
   booch_verify_sha256() { return 0; }
   booch_verify_pick() { :; }
   booch_go_arch() { printf amd64; }
@@ -85,6 +91,9 @@ test_return_trap_no_leak_go_install() {
 }
 test_return_trap_no_leak_delta_install() {
   assert_eq DONE "$(_rt_no_leak booch_delta_install 0.18.2 amd64)"
+}
+test_return_trap_no_leak_shellcheck_install() {
+  assert_eq DONE "$(_rt_no_leak booch_shellcheck_install v0.11.0 x86_64)"
 }
 test_return_trap_no_leak_codex_install() {
   assert_eq DONE "$(_rt_no_leak booch_codex_install 0.1.0)"

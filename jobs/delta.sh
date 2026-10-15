@@ -12,6 +12,10 @@
 #
 # 依存: lib/github.sh, curl, jq, dpkg, sudo。
 #
+# 取得物の検証: upstream はチェックサムを公開していないため、Releases API が資産に付ける digest で
+# SHA256 を照合する（booch_github_verify_asset。digest が付いていなければ警告して照合を
+# 飛ばし、API の取得に失敗すれば中断する）。
+#
 # テスト用の継ぎ目（seam）:
 #   booch_delta_installed_version  現在の版（未導入なら空）
 #   booch_delta_latest             最新タグ（GitHub Releases）
@@ -50,8 +54,10 @@ booch_delta_install() { # tag arch
   # 先に DL してから入れ替える（network 失敗ならパージ前に抜ける）。go.sh のような
   # ステージ＋原子的入替ではなく purge→install だが、musl .deb は依存なしで dpkg も
   # ほぼトランザクショナルなため、パージ後に install 失敗する残存ウィンドウは小さい。
-  booch_github_download_asset dandavison/delta "$tag" \
-    "$(booch_delta_asset "$tag" "$arch")" "$tmp/delta.deb" || return 1
+  local asset; asset=$(booch_delta_asset "$tag" "$arch")
+  booch_github_download_asset dandavison/delta "$tag" "$asset" "$tmp/delta.deb" || return 1
+  # upstream はチェックサムを公開していないので、Releases API の digest で照合する（パージの前）。
+  booch_github_verify_asset dandavison/delta "$tag" "$asset" "$tmp/delta.deb" || return 1
   # 動的版 git-delta が入っていると /usr/bin/delta を奪い合い dpkg が衝突するため、
   # 先にパージしてから musl 版を入れる。
   if dpkg -s git-delta >/dev/null 2>&1; then

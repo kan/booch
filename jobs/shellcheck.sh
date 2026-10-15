@@ -17,9 +17,9 @@
 #
 # 依存: lib/arch.sh, lib/github.sh, curl, jq, tar (xz), sudo, find。
 #
-# 取得物の検証: upstream (koalaman/shellcheck) はリリースにチェックサムを公開していないため
-# 未検証（delta / codex 単体バイナリと同じ扱い。HTTPS + 公式配布元に依存）。upstream が
-# checksums を出すようになれば lib/verify.sh で照合を足す。
+# 取得物の検証: upstream (koalaman/shellcheck) はリリースにチェックサムを公開していないため、
+# Releases API が資産に付ける digest で SHA256 を照合する（booch_github_verify_asset。delta と
+# 同じ扱いで、digest が付いていなければ警告して照合を飛ばし、API の取得に失敗すれば中断する）。
 #
 # テスト用の継ぎ目（seam）:
 #   booch_shellcheck_installed_version  現在の版（未導入なら空）
@@ -54,6 +54,7 @@ booch_shellcheck_install() { # tag arch
   # （呼び出し元の set -u 下で解放済みローカル変数を踏んで落ちないように）。
   trap 'rm -rf "${tmp:-}"; trap - RETURN' RETURN
   booch_github_download_asset koalaman/shellcheck "$tag" "$asset" "$tmp/sc.tar.xz" || return 1
+  booch_github_verify_asset koalaman/shellcheck "$tag" "$asset" "$tmp/sc.tar.xz" || return 1
   tar -xJf "$tmp/sc.tar.xz" -C "$tmp" || return 1
   # 既知パス（shellcheck-<tag>/shellcheck）を優先し、レイアウト差異には find でフォールバック
   # する（circleci / starship と同方針）。

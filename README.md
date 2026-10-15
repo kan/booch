@@ -24,9 +24,9 @@ booch は汎用部分だけを担う。
 素の WSL2 / Ubuntu から、booch を使う dotfiles を入れて setup を起動するところまでを 1 コマンドで:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash
 # 配置先や取り込む repo を指定する場合（bash -s -- で後続をスクリプトへ）:
-curl -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash -s -- \
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash -s -- \
     --dir "$HOME/dotfiles" --repo <owner>/<dotfiles>
 ```
 
@@ -267,8 +267,8 @@ bash-concurrent で採用）は使えない。代わりに **upstream が公開�
 | Go | ✅ SHA256 | `https://dl.google.com/go/<tarball>.sha256` |
 | CircleCI CLI | ✅ SHA256 | リリースの `circleci-cli_<ver>_checksums.txt` |
 | Starship | ✅ SHA256 | リリースの per-asset `<asset>.sha256`（ハッシュのみ） |
-| delta | ❌ 未検証 | upstream がチェックサムファイルを公開していない |
-| ShellCheck | ❌ 未検証 | upstream がリリースにチェックサムを公開していない |
+| delta | ✅ SHA256（GitHub の asset digest） | upstream はチェックサムを公開していないので、Releases API が資産に付ける digest で照合する。転送中の破損や改ざんは検出できるが、資産そのものの差し替え（上流のアカウント侵害）は検出できない。digest が付いていない（古いリリース）ときは警告して照合を飛ばし、API の取得に失敗したときは中断する |
+| ShellCheck | ✅ SHA256（GitHub の asset digest） | delta と同じ |
 | Codex CLI（インストーラ） | ✅ SHA256（インストーラが照合） | 公式のインストールスクリプトを一時ファイルへ取得して実行する。スクリプト自体は未検証（HTTPS の真正性に依存）で、スクリプトがリリースの `codex-package_SHA256SUMS` でパッケージを照合する |
 | AWS CLI / SSM Plugin | ❌ 未検証 | GPG 署名（別機構）。導入は HTTPS の真正性に依存 |
 | uv / Claude（インストーラ） | ❌ 未検証 | 公式のインストールスクリプトを一時ファイルへ取得して実行する。署名提供なし。HTTPS の真正性に依存 |

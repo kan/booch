@@ -5,9 +5,9 @@
 #   その Linux/WSL2 版に当たる。）
 #
 # 使い方（ワンライナー）:
-#   curl -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash
+#   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash
 #   # 引数を渡す場合は bash -s -- で後続をスクリプトへ:
-#   curl -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash -s -- \
+#   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kan/booch/main/install.sh | bash -s -- \
 #       --dir "$HOME/dotfiles" --repo youraccount/dotfiles
 #
 # 何をするか（各ステップ冪等。無ければ入れる / 既存なら更新）:
@@ -80,7 +80,8 @@ booch_install_ensure_gh_repo() {
   [ -f "$list" ] && [ -r "$kr" ] && return 0
   _bi_step "github-cli の apt リポジトリを追加する"
   sudo install -m 0755 -d /etc/apt/keyrings || return 1
-  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+  # --proto '=https' --tlsv1.2: リダイレクトで平文の http へ落ちることと、TLS の格下げを拒否する。
+  curl --proto '=https' --tlsv1.2 -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | sudo tee "$kr" >/dev/null || { _bi_err "gh keyring の取得に失敗"; return 1; }
   sudo chmod go+r "$kr" || return 1
   local arch; arch=$(dpkg --print-architecture)
@@ -183,6 +184,9 @@ booch_install_main() {
 }
 
 # curl|bash / 直接実行では main を走らせる。テストは BOOCH_INSTALL_NO_RUN=1 で source する。
+# 処理はすべて関数に閉じ、ここで初めて起動する。curl|bash でダウンロードが途中で切れても、
+# この if より前で切れれば何も実行されず、if の中で切れれば構文エラーで実行されない
+# （途中までのスクリプトが半端に動かない）。起動をこの末尾の 1 箇所に保つこと。
 if [ "${BOOCH_INSTALL_NO_RUN:-0}" != 1 ]; then
   booch_install_main "$@"
 fi

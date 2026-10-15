@@ -7,6 +7,15 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ### Added
 
+- `delta` / `shellcheck` ジョブで、取得した資産の SHA256 を照合するようにした（#20）。upstream はチェックサムを
+  公開していないので、GitHub の Releases API が資産に付ける digest を期待値にする。転送中の破損や改ざんは
+  検出できるが、資産そのものの差し替え（上流のアカウント侵害）は検出できない
+  - `lib/github.sh` に `booch_github_asset_digest` / `booch_github_verify_asset` を足した。digest が付いていない
+    （古いリリース）ときは警告して照合を飛ばす。API の取得に失敗したとき（レート制限など）と、digest が一致しない
+    ときは失敗にする
+  - `lib/github.sh` は、`lib/verify.sh` が読み込まれていなければ自分で読み込む（github.sh だけを読む利用側を
+    壊さないため）
+
 - `jobs/aws.sh` に、AWS CLI v2 の古い版のディレクトリを削除する関数を足した（#22）。公式インストーラの
   `install --update` は前の版（1 版 約 270MB）を `/usr/local/aws-cli/v2/` に残すので、`job_aws` で更新する
   たびに溜まっていた
@@ -26,6 +35,11 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
     作業が中断されうるので確認は省かない（非対話なら何もしない）。ジョブは非対話なので、利用側が `booch_run` の
     後に主シェルから呼ぶ。入れ替えても版がそろわないときと、確認に使う `lib/confirm.sh` を読み込めないときは
     1 を返す
+
+### Changed
+
+- README と `install.sh` のワンライナー、および `install.sh` が gh の keyring を取る curl に
+  `--proto '=https' --tlsv1.2` を付けた（#20）。リダイレクトで平文の http へ落ちることと、TLS の格下げを拒否する
 
 ### Fixed
 

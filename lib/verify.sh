@@ -4,7 +4,8 @@
 # 「最新版を入れる」ジョブは版が事前に未知で、固定 SHA256 ピン（vendor 方式）を置けない。
 # 代わりに upstream が実行時に公開するチェックサム（go の `<file>.sha256` /
 # GitHub Releases の `checksums.txt` 等）を引いて照合する。upstream がチェックサムを
-# 出していないツール（delta / codex の単体バイナリ / aws）は検証不可（未検証）。
+# 出していない GitHub Releases の資産（delta / shellcheck）は、lib/github.sh の
+# booch_github_verify_asset が Releases API の digest を期待値にしてここで照合する。
 #
 # 使い方:
 #   source "$BOOCH_ROOT/lib/verify.sh"

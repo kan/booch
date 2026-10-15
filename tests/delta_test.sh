@@ -21,6 +21,11 @@ source "$BOOCH_ROOT/lib/github.sh"
 # shellcheck source=jobs/delta.sh
 source "$BOOCH_ROOT/jobs/delta.sh"
 
+# install は digest の照合で GitHub API を呼ぶ。テストからネットワークへ出ないよう、既定では
+# digest の付いていないリリースを返す（照合は警告して飛ばされ、導入の分岐を検証できる）。照合を
+# 見るテストは個別に上書きする。
+booch_github_api() { printf '{"assets":[]}'; }
+
 # --- 純粋関数 / arch ---
 test_delta_asset_name() {
   assert_eq "git-delta-musl_0.18.2_amd64.deb" "$(booch_delta_asset 0.18.2 amd64)"
@@ -116,6 +121,20 @@ test_delta_install_skips_purge_when_absent() {
   booch_delta_install 0.19.2 amd64 >/dev/null 2>&1
   assert_not_contains "$cap" "dpkg -P"
   assert_contains "$cap" "dpkg -i"
+}
+
+# digest が一致しなければ、パージも導入もせずに失敗する（#20）。
+# shellcheck disable=SC2317,SC2329
+test_delta_install_rejects_digest_mismatch() {
+  booch_github_download_asset() { echo tampered > "$4"; }
+  booch_github_api() {
+    printf '{"assets":[{"name":"git-delta-musl_0.19.2_amd64.deb","digest":"sha256:%064d"}]}' 0
+  }
+  dpkg() { [ "$1" = "-s" ] && return 0; return 0; }
+  local cap=""; sudo() { cap="$cap|$*"; return 0; }
+  local rc; if booch_delta_install 0.19.2 amd64 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "" "$cap" "照合の前に sudo（パージ / 導入）を呼ばない"
 }
 
 # --- runner 経由（declare -f でスタブが子へ運ばれること＋失敗時の自動 failed 記録） ---

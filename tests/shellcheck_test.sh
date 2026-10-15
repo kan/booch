@@ -19,6 +19,10 @@ source "$BOOCH_ROOT/lib/github.sh"
 # shellcheck source=jobs/shellcheck.sh
 source "$BOOCH_ROOT/jobs/shellcheck.sh"
 
+# install は digest の照合で GitHub API を呼ぶ。テストからネットワークへ出ないよう、既定では
+# digest の付いていないリリースを返す。照合を見るテストは個別に上書きする。
+booch_github_api() { printf '{"assets":[]}'; }
+
 # --- バージョン解析（"version:" 行から版だけを取る） ---
 test_shellcheck_installed_version_parses_version_line() {
   # stub 関数を定義すると command -v shellcheck が関数として真になり、実解析を通せる。
@@ -74,6 +78,21 @@ test_shellcheck_updates_when_differ() {
 test_shellcheck_current_when_equal_after_normalize() {
   _run_job_shellcheck "0.11.0" "v0.11.0"
   assert_eq "ShellCheck|current|0.11.0|" "$(cat "$BOOCH_RESULT_DIR/shellcheck.result")"
+}
+
+# digest が一致しなければ、展開も導入もせずに失敗する（#20）。
+test_shellcheck_install_rejects_digest_mismatch() {
+  booch_github_download_asset() { echo tampered > "$4"; }
+  booch_github_api() {
+    printf '{"assets":[{"name":"shellcheck-v0.11.0.linux.x86_64.tar.xz","digest":"sha256:%064d"}]}' 0
+  }
+  local extracted=0 cap=""
+  tar() { extracted=1; }
+  sudo() { cap="$*"; }
+  local rc; if booch_shellcheck_install v0.11.0 x86_64 >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "0" "$extracted" "照合の前に展開しない"
+  assert_eq "" "$cap"
 }
 
 run_tests
