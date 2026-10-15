@@ -68,7 +68,7 @@ booch/
 ├── jobs/
 │   ├── go.sh                     # 提供ジョブ: Go ツールチェインの導入 / 更新
 │   ├── delta.sh                  # 提供ジョブ: delta (git pager) の導入 / 更新
-│   ├── codex.sh                  # 提供ジョブ: Codex CLI の導入 / 更新（公式インストーラ。~/.local/bin を PATH に通しておく）
+│   ├── codex.sh                  # 提供ジョブ: Codex CLI の導入 / 更新（公式インストーラ。~/.local/bin を PATH に通しておく）。共有デーモンの版合わせも持つ
 │   ├── aws.sh                    # 提供ジョブ: AWS CLI v2 + Session Manager Plugin
 │   ├── circleci.sh               # 提供ジョブ: CircleCI CLI の導入 / 更新
 │   ├── starship.sh               # 提供ジョブ: Starship プロンプトの導入 / 更新

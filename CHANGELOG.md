@@ -5,6 +5,18 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `jobs/codex.sh` に、Codex の共有デーモン（app-server）の版を CLI に合わせる機構を足した（#21）。
+  `job_codex` が CLI を更新しても、動いているデーモンは自分用の codex で古い版のまま残り、Codex が起動時に
+  版のずれを警告していた
+  - `booch_codex_daemon_versions`: `"<cli> <app>"` の 1 行を出す。デーモンが止まっていれば app は空、
+    取れなければ非 0（doctor などの表示用）
+  - `booch_codex_daemon_sync`: 版がずれていれば y/N を聞いて `codex app-server daemon update` する。実行中の
+    作業が中断されうるので確認は省かない（非対話なら何もしない）。ジョブは非対話なので、利用側が `booch_run` の
+    後に主シェルから呼ぶ。入れ替えても版がそろわないときと、確認に使う `lib/confirm.sh` を読み込めないときは
+    1 を返す
+
 ### Fixed
 
 - `apt-get update` が一部の repo の index を取得できなくても終了コード 0 を返すため、`booch_apt_sync` /

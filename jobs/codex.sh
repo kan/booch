@@ -23,13 +23,25 @@
 # 続けるため。撤去するのは booch 自身が置いた物だけで、npm 版など他の経路で入った codex の
 # 撤去は利用側に任せる。
 #
+# **共有デーモン（app-server）の版は job_codex では合わせない。** TUI などが使うバックグラウンドの
+# デーモンは自分用の codex（$CODEX_HOME/packages/app-server-daemon/）で動くので、CLI を更新しても
+# 動いているデーモンは古い版のまま残る（Codex は起動時に版のずれを警告する）。stop → start /
+# restart ではデーモン用の codex を入れ直さず、直るのは `codex app-server daemon update` だけ。
+# update は実行中の作業を中断しうるため、確認を挟む booch_codex_daemon_sync を用意してある。
+# ジョブは非対話なので、利用側が booch_run の後に主シェルから呼ぶ。版を表示するだけ（doctor 等）
+# なら booch_codex_daemon_versions を使う。
+#
 # 使い方:
 #   source "$BOOCH_ROOT/lib/arch.sh"
 #   source "$BOOCH_ROOT/lib/github.sh"
 #   source "$BOOCH_ROOT/jobs/codex.sh"
 #   booch_job codex "Codex CLI" job_codex 300
+#   booch_run ...
+#   source "$BOOCH_ROOT/lib/confirm.sh"
+#   booch_codex_daemon_sync || warn=1      # 主シェルの後段で（ジョブの中では呼ばない）
 #
-# 依存: lib/arch.sh, lib/github.sh, curl, jq, sh, tar, find。旧単体バイナリの削除時だけ sudo。
+# 依存: lib/arch.sh, lib/github.sh, curl, jq, sh, tar, find, timeout。旧単体バイナリの削除時だけ
+# sudo。booch_codex_daemon_sync は lib/confirm.sh も使う。
 #
 # テスト用の継ぎ目（seam）:
 #   booch_codex_installed_version  インストーラが導入した codex の版（未導入なら空）
@@ -39,6 +51,8 @@
 #   booch_codex_fetch_installer <dest>  インストーラの取得
 #   booch_codex_run_installer <script> <version>  インストーラの実行
 #   booch_codex_legacy_path        以前の booch が置いた単体バイナリのパス
+#   booch_codex_daemon_version_json  `codex app-server daemon version` の JSON（停止中は 1、応答なしは 124）
+#   booch_codex_daemon_update      `codex app-server daemon update`（副作用）
 
 # インストーラの導入先（codex の symlink を置くディレクトリ）。インストーラと同じ既定値。
 booch_codex_bin_dir() {
@@ -151,4 +165,83 @@ job_codex() {
     echo "codex: 旧単体バイナリの削除に失敗: $(booch_codex_legacy_path)" >&2
     return 1
   fi
+}
+
+# --- 共有デーモン（app-server）の版合わせ（ジョブではなく主シェルから呼ぶ） ---
+
+# `daemon version` は cliVersion と appServerVersion を JSON で返す。止まっていれば exit 1 で、
+# デーモンを起動しない。応答しないデーモンで setup / doctor を止めないよう上限を付ける
+# （応答しなければ timeout の 124 / 137 が返る）。
+booch_codex_daemon_version_json() {
+  timeout --kill-after=2 5 "$(booch_codex_bin_dir)/codex" app-server daemon version 2>/dev/null
+}
+
+# デーモン用の codex を更新し、動いているデーモンを新しい版で起こし直す（最新なら何もしない）。
+# SIGTERM を無視されても setup が固まらないよう、猶予の後に kill する。
+booch_codex_daemon_update() {
+  timeout --kill-after=10 120 "$(booch_codex_bin_dir)/codex" app-server daemon update >/dev/null
+}
+
+# "<cli> <app>" の 1 行を出す。デーモンが止まっていれば app は空。取れなければ非 0。
+# CLI は PATH 上ではなく導入先の codex を見る（booch_codex_installed_version と出どころを揃える）。
+booch_codex_daemon_versions() {
+  local json rc=0 cli
+  [ -x "$(booch_codex_bin_dir)/codex" ] || return 1
+  command -v jq >/dev/null 2>&1 || return 1
+  json=$(booch_codex_daemon_version_json) || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    jq -er '"\(.cliVersion // empty) \(.appServerVersion // "")"' <<<"$json" 2>/dev/null
+    return
+  fi
+  # 応答しない（timeout）ときは停止中と区別して非 0 にする。それ以外の失敗は停止中として扱う
+  # （停止中も、クラッシュで残ったソケットへの接続失敗も exit 1 で、区別する手段が無い）。
+  case "$rc" in 124 | 137) return 1 ;; esac
+  cli=$(booch_codex_installed_version)
+  [ -n "$cli" ] || return 1
+  printf '%s \n' "$cli"
+}
+
+# デーモンの版が CLI とずれていれば y/N を聞いて update する。実行中の作業が中断されうるので、
+# assume_yes は受け取らず確認を省かない（非対話なら何もしない）。ずれていない / 停止中 / 版が
+# 取れないときも何もせず 0。確認手段（lib/confirm.sh）を読めないときと、update しても版が
+# そろわないときは 1 を返すので、set -e の caller は `booch_codex_daemon_sync || warn=1` で受ける。
+booch_codex_daemon_sync() {
+  local cli app line i now=
+  read -r cli app < <(booch_codex_daemon_versions) || return 0
+  [ -n "$app" ] && [ "$cli" != "$app" ] || return 0
+  # 確認を挟めないまま中断を伴う update へ進まないよう、confirm.sh が無ければ失敗にする
+  # （「常に no」で黙って見送ると、ずれが直らないまま気付かれない）。
+  if ! declare -F booch_confirm_yes_no >/dev/null 2>&1; then
+    if [ -n "${BOOCH_ROOT:-}" ] && [ -f "$BOOCH_ROOT/lib/confirm.sh" ]; then
+      # shellcheck source=lib/confirm.sh
+      source "$BOOCH_ROOT/lib/confirm.sh"
+    else
+      echo "Codex: lib/confirm.sh を読み込めないため、デーモンの版のずれを直せません" >&2
+      return 1
+    fi
+  fi
+  echo "Codex: CLI $cli / デーモン $app（版がずれています）"
+  if ! booch_confirm_yes_no "Codex のデーモンを入れ替えますか？（実行中の作業は中断されます）"; then
+    echo "Codex: デーモンの入れ替えをスキップしました（codex の /daemon か codex app-server daemon update で直せます）"
+    return 0
+  fi
+  echo "Codex: デーモンを入れ替えています..."
+  booch_codex_daemon_update || echo "Codex: codex app-server daemon update が失敗しました（rc=$?）" >&2
+  # 入れ替えた直後は、起動しきっておらず版を読めないことや、古いデーモンがまだ応答していることが
+  # あるので、版がそろうまで数回読み直す。
+  for i in 1 2 3 4 5; do
+    if line=$(booch_codex_daemon_versions); then
+      now=${line#* }
+      [ -n "$now" ] && [ "$now" = "$cli" ] && break
+    else
+      now="（応答なし）"
+    fi
+    [ "$i" -lt 5 ] && sleep 1
+  done
+  if [ "$now" = "$cli" ]; then
+    echo "Codex: デーモンを入れ替えました（$now）"
+    return 0
+  fi
+  echo "Codex: デーモンを入れ替えられませんでした（CLI $cli / デーモン ${now:-停止中}）" >&2
+  return 1
 }

@@ -322,4 +322,156 @@ test_codex_via_runner_install_failure_is_failed() {
   assert_contains "$out" "failed"
 }
 
+# --- 共有デーモンの版（daemon version の JSON / 停止中 / 取得不能） ---
+test_codex_daemon_versions_reads_json() {
+  local d; d=$(mktemp -d)
+  _fake_codex_bin "$d" "codex-cli 0.160.0"
+  booch_codex_daemon_version_json() { echo '{"cliVersion":"0.160.0","appServerVersion":"0.159.2"}'; }
+  assert_eq "0.160.0 0.159.2" "$(CODEX_INSTALL_DIR=$d booch_codex_daemon_versions)"
+  rm -rf "$d"
+}
+# 停止中は daemon version が exit 1。ソケットが無ければ停止中として app を空にする。
+test_codex_daemon_versions_empty_app_when_stopped() {
+  local d; d=$(mktemp -d)
+  _fake_codex_bin "$d/bin" "codex-cli 0.160.0"
+  booch_codex_daemon_version_json() { return 1; }
+  local cli app
+  read -r cli app < <(CODEX_INSTALL_DIR=$d/bin CODEX_HOME=$d/home booch_codex_daemon_versions)
+  assert_eq "0.160.0" "$cli"
+  assert_eq "" "$app"
+  rm -rf "$d"
+}
+# 応答しない（timeout の 124 / 137）ときは停止中と区別して非 0。
+test_codex_daemon_versions_fails_when_daemon_unresponsive() {
+  local d; d=$(mktemp -d)
+  _fake_codex_bin "$d" "codex-cli 0.160.0"
+  local code rc
+  for code in 124 137; do
+    booch_codex_daemon_version_json() { return "$code"; }
+    if CODEX_INSTALL_DIR=$d booch_codex_daemon_versions >/dev/null; then rc=0; else rc=$?; fi
+    assert_status 1 "$rc" "rc=$code"
+  done
+  rm -rf "$d"
+}
+test_codex_daemon_versions_fails_without_cli() {
+  local called=0 rc
+  booch_codex_daemon_version_json() { called=1; }
+  if booch_codex_daemon_versions >/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "0" "$called" "導入先に codex が無ければデーモンへ問い合わせない"
+}
+
+# --- booch_codex_daemon_sync（versions / confirm / update をスタブ） ---
+# versions は `< <(...)` のサブシェルで呼ばれるので、update 前後の状態はファイルで持つ。
+_daemon_sync_setup() { # before after
+  _ds_dir=$(mktemp -d)
+  printf '%s\n' "$1" > "$_ds_dir/before"; printf '%s\n' "$2" > "$_ds_dir/after"
+  booch_codex_daemon_versions() {
+    if [ -e "$_ds_dir/updated" ]; then cat "$_ds_dir/after"; else cat "$_ds_dir/before"; fi
+  }
+  booch_codex_daemon_update() { : > "$_ds_dir/updated"; }
+  sleep() { :; }
+}
+
+test_codex_daemon_sync_noop_when_versions_match() {
+  _daemon_sync_setup "0.160.0 0.160.0" ""
+  local asked=0
+  booch_confirm_yes_no() { asked=1; return 0; }
+  booch_codex_daemon_sync >/dev/null
+  assert_eq "0" "$asked"
+  assert_file_absent "$_ds_dir/updated"
+  rm -rf "$_ds_dir"
+}
+test_codex_daemon_sync_noop_when_daemon_stopped() {
+  _daemon_sync_setup "0.160.0 " ""
+  local asked=0
+  booch_confirm_yes_no() { asked=1; return 0; }
+  booch_codex_daemon_sync >/dev/null
+  assert_eq "0" "$asked"
+  rm -rf "$_ds_dir"
+}
+# 実行中の作業を中断しうるので assume_yes を渡さない（--yes でも確認を省かない）。
+test_codex_daemon_sync_skips_when_declined_and_never_assumes_yes() {
+  _daemon_sync_setup "0.160.0 0.159.2" ""
+  local nargs=""
+  booch_confirm_yes_no() { nargs=$#; return 1; }
+  local rc; if booch_codex_daemon_sync >/dev/null; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_eq "1" "$nargs" "assume_yes を渡さない"
+  assert_file_absent "$_ds_dir/updated"
+  rm -rf "$_ds_dir"
+}
+test_codex_daemon_sync_updates_when_confirmed() {
+  _daemon_sync_setup "0.160.0 0.159.2" "0.160.0 0.160.0"
+  booch_confirm_yes_no() { return 0; }
+  local out rc; if out=$(booch_codex_daemon_sync 2>&1); then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_contains "$out" "入れ替えました（0.160.0）"
+  rm -rf "$_ds_dir"
+}
+# 入れ替え直後は起動しきっておらず読めないことがあるので、読み直して待つ。
+test_codex_daemon_sync_retries_until_daemon_is_up() {
+  _daemon_sync_setup "0.160.0 0.159.2" "0.160.0 "
+  booch_confirm_yes_no() { return 0; }
+  sleep() { printf '%s\n' "0.160.0 0.160.0" > "$_ds_dir/after"; }
+  local rc; if booch_codex_daemon_sync >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  rm -rf "$_ds_dir"
+}
+# update 直後に古いデーモンがまだ旧版を返しても、そこで打ち切らず新版になるまで待つ。
+test_codex_daemon_sync_keeps_waiting_while_old_daemon_answers() {
+  _daemon_sync_setup "0.160.0 0.159.2" "0.160.0 0.159.2"
+  booch_confirm_yes_no() { return 0; }
+  sleep() { printf '%s\n' "0.160.0 0.160.0" > "$_ds_dir/after"; }
+  local rc; if booch_codex_daemon_sync >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  rm -rf "$_ds_dir"
+}
+test_codex_daemon_sync_returns_1_when_still_mismatched() {
+  _daemon_sync_setup "0.160.0 0.159.2" "0.160.0 0.159.2"
+  booch_confirm_yes_no() { return 0; }
+  local err rc; if err=$(booch_codex_daemon_sync 2>&1 >/dev/null); then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_contains "$err" "入れ替えられませんでした（CLI 0.160.0 / デーモン 0.159.2）"
+  rm -rf "$_ds_dir"
+}
+# 入れ替え後に版を読めないままでも、失敗の表示から CLI の版を落とさない。
+test_codex_daemon_sync_reports_unresponsive_with_cli_version() {
+  _daemon_sync_setup "0.160.0 0.159.2" ""
+  booch_codex_daemon_versions() {
+    [ -e "$_ds_dir/updated" ] && return 1
+    cat "$_ds_dir/before"
+  }
+  booch_confirm_yes_no() { return 0; }
+  local err; err=$(booch_codex_daemon_sync 2>&1 >/dev/null) || true
+  assert_contains "$err" "CLI 0.160.0 / デーモン （応答なし）"
+  rm -rf "$_ds_dir"
+}
+test_codex_daemon_sync_reports_update_failure() {
+  _daemon_sync_setup "0.160.0 0.159.2" "0.160.0 0.159.2"
+  booch_codex_daemon_update() { return 124; }
+  booch_confirm_yes_no() { return 0; }
+  local err; err=$(booch_codex_daemon_sync 2>&1 >/dev/null) || true
+  assert_contains "$err" "rc=124"
+}
+# 確認手段が無いまま中断を伴う update へ進まず、黙って見送りもしない。
+test_codex_daemon_sync_fails_without_confirm() {
+  _daemon_sync_setup "0.160.0 0.159.2" ""
+  unset -f booch_confirm_yes_no
+  local rc; if BOOCH_ROOT=/nonexistent booch_codex_daemon_sync >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_file_absent "$_ds_dir/updated"
+  rm -rf "$_ds_dir"
+}
+# 本物の confirm.sh は端末があると y/N で止まるので、偽物を置いた BOOCH_ROOT から読ませる。
+test_codex_daemon_sync_sources_confirm_from_booch_root() {
+  _daemon_sync_setup "0.160.0 0.159.2" ""
+  unset -f booch_confirm_yes_no
+  mkdir -p "$_ds_dir/root/lib"
+  printf 'booch_confirm_yes_no() { : > "%s/asked"; return 1; }\n' "$_ds_dir" > "$_ds_dir/root/lib/confirm.sh"
+  BOOCH_ROOT=$_ds_dir/root booch_codex_daemon_sync >/dev/null 2>&1
+  [ -e "$_ds_dir/asked" ] || { echo "confirm.sh を読み込んで確認していない" >&2; return 1; }
+  rm -rf "$_ds_dir"
+}
+
 run_tests
