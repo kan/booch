@@ -19,19 +19,20 @@ jobs:
     name: ShellCheck (SARIF -> Code scanning)
     runs-on: ubuntu-latest
     steps:
-      # 供給網対策としてタグではなく commit SHA で固定する（タグ付け替えを防ぐ）。
-      # 版の更新は Dependabot が PR で運ぶ（.github/dependabot.yml）。
+      # 実際に動く commit は .github/workflows/actions.lock が固定する（タグ付け替えを防ぐ）。
+      # uses: を変えたら gh actions-lock を流し直す。版の更新は Dependabot が lockfile ごと PR で運ぶ。
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
       # push ではフル、pull_request では差分をスキャンし、SARIF を Code scanning へ
       # アップロードする。external-sources は既定 true（ci.yml の `-x` と整合）。
-      # SHA 固定により、同梱 shellcheck の版更新も Dependabot の PR として可視化される
-      # （@v5 の可動タグ参照だと版が黙って動き、PR が出ない）。
+      # 完全な版のタグ（@v5.5.7）と lockfile で固定するので、同梱 shellcheck の版更新も Dependabot の
+      # PR として見える（@v5 のような可動タグだと版が黙って動き、PR が出ない）。
+      # 同梱のコンテナイメージは digest で固定されていないため、lockfile の対象外（gh actions-lock が警告する）。
       - name: Differential ShellCheck
-        uses: redhat-plumbers-in-action/differential-shellcheck@f51c7c0d32777d00de777131d25918617a246415 # v5.5.7
+        uses: redhat-plumbers-in-action/differential-shellcheck@v5.5.7
         with:
           severity: style
           token: ${{ secrets.GITHUB_TOKEN }}

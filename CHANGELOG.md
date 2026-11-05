@@ -5,6 +5,13 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Changed
+
+- GitHub Actions の版の固定を、`uses:` の commit SHA から workflow lockfile（`.github/workflows/actions.lock`）へ
+  移した。`uses:` は完全な版のタグ（`@v7.0.1`）で書き、実際に動く commit は lockfile が固定する。
+  `verify-lockfile.yml` が PR と main への push で `gh actions-lock --verify` を回す。固定している commit は
+  移行の前後で変わらない
+
 ## [1.19.0] - 2026-10-15
 
 ### Added

@@ -285,7 +285,7 @@ gomod / npm、CodeQL 等）はそのまま適用できない。構成に合わ�
 | 施策 | 採否 | 内容 / 理由 |
 |---|---|---|
 | Dependabot（github-actions） | ✅ 採用 | `.github/dependabot.yml`。ワークフローが使う Actions のバージョンを週次で追従 |
-| Actions の commit SHA ピン | ✅ 採用 | `uses:` を可動タグではなく commit SHA で固定し、タグ付け替えを防ぐ。版更新は Dependabot が PR で運ぶ |
+| Actions の workflow lockfile | ✅ 採用 | `.github/workflows/actions.lock` が `uses:` の実際の commit を固定し、タグ付け替えを防ぐ（`gh actions-lock` で生成）。`verify-lockfile.yml` が PR と main への push で食い違いを検査する。版更新は Dependabot が lockfile ごと PR で運ぶ |
 | Dependabot alerts / security updates | ✅ 採用 | 既知脆弱性のある Actions を検知し、自動で更新する（リポジトリ設定で有効化） |
 | Dependabot（gomod / npm 等） | — 非該当 | package manifest を持たないため対象外 |
 | Secret scanning / Push protection | ✅ 採用 | トークン等の混入を検出し、push を止める（GitHub 標準。有効化済み） |

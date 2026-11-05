@@ -13,9 +13,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # 供給網対策としてタグではなく commit SHA で固定する（タグ付け替えを防ぐ）。
-      # 版の更新は Dependabot が PR で運ぶ（.github/dependabot.yml）。
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # 実際に動く commit は .github/workflows/actions.lock が固定する（タグ付け替えを防ぐ）。
+      # uses: を変えたら gh actions-lock を流し直す。版の更新は Dependabot が lockfile ごと PR で運ぶ。
+      - uses: actions/checkout@v7.0.1
 
       - name: bash syntax check
         run: bash -n bin/booch install.sh lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh

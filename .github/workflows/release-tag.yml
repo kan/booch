@@ -17,10 +17,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      # 供給網対策としてタグではなく commit SHA で固定する（タグ付け替えを防ぐ）。
-      # 版の更新は Dependabot が PR で運ぶ（.github/dependabot.yml）。
+      # 実際に動く commit は .github/workflows/actions.lock が固定する（タグ付け替えを防ぐ）。
+      # uses: を変えたら gh actions-lock を流し直す。版の更新は Dependabot が lockfile ごと PR で運ぶ。
       # VERSION を読むためだけなので浅い clone でよい（タグの種別はここでは取れない。下記）。
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
 
       # checkout の版によっては、タグ push でも refspec `+<コミット SHA>:refs/tags/<名前>` で
       # 取るため、ローカルの refs/tags/<名前> が annotated タグでもコミットを直接指す
