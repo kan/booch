@@ -208,7 +208,11 @@ GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに�
   - lockfile が固定するのは action の commit だけで、action が使うコンテナイメージは対象外
     （`differential-shellcheck` のイメージは digest で固定されておらず、`gh actions-lock` が警告を出す）。
   - `vendor/bash-concurrent` は Dependabot 対象外で `vendor/update.sh`（sha256 ピン）で更新する。
-- **CodeQL は使わない**（Bash 非対応）。Code scanning は上記 ShellCheck → SARIF で代替する。
+- **CodeQL は default setup（query suite は extended）で、Bash 以外を解析する**。CodeQL は Bash に
+  対応しないので、Bash の Code scanning は上記 ShellCheck → SARIF が担う。CodeQL が見るのは GitHub Actions の
+  ワークフローと `scripts/tagpr/` の JavaScript で、設定はリポジトリ側にありワークフローのファイルは無い
+  （PR の checks に出る `Analyze (...)` / `CodeQL` はこれ）。`scripts/tagpr/` の指摘は、手で直さず
+  kan/tagpr-scripts で直して取り込む（上記「scripts/tagpr の更新」）。
 
 ## 変更の入れ方（PR 運用）
 
