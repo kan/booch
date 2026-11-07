@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 # booch 提供ジョブ: Codex CLI の導入 / 更新（非対話）。
 #
-# 公式インストーラ（https://chatgpt.com/codex/install.sh）で導入と更新をする。Codex CLI は本体の
-# ほかに付随の実行ファイル（codex-code-mode-host / rg / サンドボックス用の bwrap）をパッケージと
-# して同梱しており、GitHub Releases の単体バイナリだけを置いても正常に動かない。インストーラは
+# 公式インストーラ（install.sh）で導入と更新をする。Codex CLI は本体のほかに付随の実行ファイル
+# （codex-code-mode-host / rg / サンドボックス用の bwrap）をパッケージとして同梱しており、
+# GitHub Releases の単体バイナリだけを置いても正常に動かない。インストーラは
 # $CODEX_HOME/packages/standalone/releases/<版>-<target> へパッケージを展開し（SHA256 は
 # インストーラが照合する）、同じ階層の current をその版へ向け、$CODEX_INSTALL_DIR（既定
 # ~/.local/bin）に codex の symlink を張る。sudo は使わない。
 #
+# **インストーラは、入れる版のタグの GitHub Releases の資産から取り、Releases API の digest で
+# 照合してから実行する**（delta / shellcheck と同じ水準で、転送中の改ざんは検出できるが、上流の
+# アカウント侵害は検出できない。delta と違い、digest が無いときも中断する）。chatgpt.com/codex/install.sh も同じ
+# 中身を配っているが、こちらは照合する値が無い。インストーラを使わず資産を直接配置する方式は
+# 採らない: インストーラは排他ロック、展開後の検査、codex 本体の自動更新と共有する記録
+# （selection-history / auto-update-version）まで持っており、booch が写すと上流の変更に追従し
+# 損ねたときに codex 本体と食い違う。
+#
 # 更新も同じ経路で行う。導入済みの版と GitHub の最新タグを比べ、違えばその版を指定して
-# インストーラを実行し直す（current が新しい版へ張り替わる）。インストーラは古い版を消さない
-# （1 版あたり数百 MB）ので、導入後に current と直前の版以外を削除する。直前の版を残すのは、
-# 更新前から動いている codex のセッションが自分の版の付随ファイルを起動し続けるため。
+# インストーラを実行し直す（current が新しい版へ張り替わる）。古い版の削除はインストーラに
+# 任せる（current と直前の版を残し、使用中のプロセスがある版も残す）。
 #
 # **PATH は利用側で通す。** インストーラは導入先が PATH に無いとシェルの設定ファイル
 # （~/.bashrc 等）へ PATH の追記ブロックを書き込む。設定ファイルを dotfiles で管理している
@@ -48,7 +55,7 @@
 #   booch_codex_latest             最新タグ（rust-vX.Y.Z 形式）
 #   booch_codex_arch               対応アーキの確認（x86_64 / aarch64）
 #   booch_codex_install <version>  実際の導入（副作用。version は rust-v を外した X.Y.Z）
-#   booch_codex_fetch_installer <dest>  インストーラの取得
+#   booch_codex_fetch_installer <dest> <version>  インストーラの取得と照合（version は X.Y.Z）
 #   booch_codex_run_installer <script> <version>  インストーラの実行
 #   booch_codex_legacy_path        以前の booch が置いた単体バイナリのパス
 #   booch_codex_daemon_version_json  `codex app-server daemon version` の JSON（停止中は 1、応答なしは 124）
@@ -62,11 +69,6 @@ booch_codex_bin_dir() {
 # Codex のホーム。インストーラと同じ既定値。
 booch_codex_home() {
   printf '%s' "${CODEX_HOME:-$HOME/.codex}"
-}
-
-# インストーラがパッケージを置くディレクトリ（releases/ と current を持つ）。
-booch_codex_standalone_dir() {
-  printf '%s' "$(booch_codex_home)/packages/standalone"
 }
 
 booch_codex_installed_version() {
@@ -86,8 +88,22 @@ booch_codex_latest() {
 # 対応アーキの確認（x86_64 / aarch64）。インストーラも判定するが、非対応なら取得前に止める。
 booch_codex_arch() { booch_arch_rust_style; }
 
-booch_codex_fetch_installer() { # dest
-  curl -fsSL --max-time 60 https://chatgpt.com/codex/install.sh -o "$1"
+# 入れる版のタグ（rust-vX.Y.Z）の install.sh を取り、digest で照合する。インストーラの版も
+# 入れる版にそろう。取得したスクリプトはそのまま実行するので、digest が無いときも失敗にする
+# （booch_github_verify_asset は digest が無ければ警告して通すため使わない）。
+booch_codex_fetch_installer() { # dest version
+  local dest=$1 tag="rust-v$2" want
+  if ! want=$(booch_github_asset_digest openai/codex "$tag" install.sh); then
+    echo "codex: install.sh の digest を取得できません（API の失敗）。照合できないため中断します" >&2
+    return 1
+  fi
+  if [ -z "$want" ]; then
+    echo "codex: $tag の install.sh に digest が無いため、照合できず中断します" >&2
+    return 1
+  fi
+  curl --proto '=https' --tlsv1.2 -fsSL --max-time 60 \
+    "https://github.com/openai/codex/releases/download/$tag/install.sh" -o "$dest" || return 1
+  booch_verify_sha256 "$dest" "$want"
 }
 
 booch_codex_run_installer() { # script version
@@ -100,29 +116,6 @@ booch_codex_run_installer() { # script version
   trap 'rm -rf "${fake_home:-}"; trap - RETURN' RETURN
   HOME="$fake_home" CODEX_HOME="$codex_home" CODEX_INSTALL_DIR="$bin_dir" \
     CODEX_NON_INTERACTIVE=true sh "$script" --release "$version"
-}
-
-# current が指す版ディレクトリの名前（<版>-<target>）。current が無ければ空。
-booch_codex_current_release() {
-  local target
-  target=$(readlink "$(booch_codex_standalone_dir)/current" 2>/dev/null) || return 0
-  printf '%s' "${target##*/}"
-}
-
-# current と keep（直前の版の名前）以外の版ディレクトリを削除する。作業中の .staging.* は
-# インストーラ自身が掃除するので触らない。比較は名前で行う（パスで比べると、途中の
-# symlink や `//` の有無で一致せず、current まで消してしまう）。
-booch_codex_prune_releases() { # [keep]
-  local keep=${1:-}
-  local current; current=$(booch_codex_current_release)
-  [ -n "$current" ] || return 0
-  local dir name
-  while IFS= read -r dir; do
-    name=${dir##*/}
-    [ "$name" = "$current" ] && continue
-    [ -n "$keep" ] && [ "$name" = "$keep" ] && continue
-    rm -rf "$dir"
-  done < <(find "$(booch_codex_standalone_dir)/releases" -mindepth 1 -maxdepth 1 -type d ! -name '.*' 2>/dev/null)
 }
 
 booch_codex_legacy_path() { printf '/usr/local/bin/codex'; }
@@ -138,13 +131,11 @@ booch_codex_remove_legacy() {
 
 booch_codex_install() { # version
   local version=$1
-  local previous; previous=$(booch_codex_current_release)
   local tmp; tmp=$(mktemp -d)
   trap 'rm -rf "${tmp:-}"; trap - RETURN' RETURN
-  booch_codex_fetch_installer "$tmp/install.sh" || return 1
+  booch_codex_fetch_installer "$tmp/install.sh" "$version" || return 1
   # インストーラの進捗表示はジョブのログへ流す（ステータス行は booch_job_sync が出す）。
-  booch_codex_run_installer "$tmp/install.sh" "$version" >&2 || return 1
-  booch_codex_prune_releases "$previous"
+  booch_codex_run_installer "$tmp/install.sh" "$version" >&2
 }
 
 job_codex() {

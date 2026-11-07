@@ -17,10 +17,13 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 - `booch_apt_install_key` の curl に `--proto '=https' --tlsv1.2` を付けた（リダイレクトで平文の http へ落ちることと、
   TLS の格下げを拒否する）
-
 - `booch_apt_keyring_records` は `gpg` を使い捨ての `GNUPGHOME` で呼ぶようにした。利用者の `~/.gnupg` を作ったり
   触ったりしない
-
+- `job_codex` は古い版を削除しなくなった（#25）。インストーラが自分で削除する（current と直前の版、使用中の
+  プロセスがある版を残す）。booch の削除は使用中かどうかを見ていなかった。インストーラは安全に消せると判断できない
+  ときは削除を丸ごと見送るので、次の環境では古い版（1 版あたり数百 MB）が残る: 版を切り替えたときの記録
+  （`selection-history`）がまだ無い（次に版が上がると書かれる）、`$CODEX_HOME/packages` の途中が symlink、
+  `$CODEX_HOME` がローカルでないファイルシステム上にある、中身を読めない codex / rg / bwrap のプロセスがある
 - GitHub Actions の版の固定を、`uses:` の commit SHA から workflow lockfile（`.github/workflows/actions.lock`）へ
   移した。`uses:` は完全な版のタグ（`@v7.0.1`）で書き、実際に動く commit は lockfile が固定する。
   `verify-lockfile.yml` が PR と main への push で `gh actions-lock --verify` を回す。固定している commit は
@@ -33,6 +36,11 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - 変更は main へ直接 push せず、PR で入れる運用に変えた。tagpr はマージされた PR からリリース PR を組み立てる
   ため
 
+### Removed
+
+- `jobs/codex.sh` の `booch_codex_prune_releases` / `booch_codex_current_release` / `booch_codex_standalone_dir` を
+  削除した（#25）。古い版の削除をインストーラに任せたため
+
 ### Security
 
 - `install.sh` が gh の apt リポジトリの keyring を、主鍵の fingerprint で照合してから置くようにした（#23）。
@@ -40,6 +48,11 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
   照合に使う `gpg` が無ければ、gh を入れるときに一緒に apt で入れる
   - `.github/workflows/gh-keyring.yml` が週 1 回、上流の今の keyring を同じ照合にかける。上流が鍵を足したり
     替えたりして `install.sh` の固定値が古くなれば、ここで赤になる
+- `job_codex` が公式インストーラ（`install.sh`）を、入れる版のタグの GitHub Releases の資産から取り、Releases API
+  の digest で照合してから実行するようにした（#25）。これまでは `https://chatgpt.com/codex/install.sh` を照合せずに
+  実行していた。digest を取れないときと、資産に digest が無いときも、実行せずに中断する。インストーラの版も入れる
+  版にそろう。`booch_codex_fetch_installer` は 2 番目の引数で版（X.Y.Z）を受け取る。インストーラを使わずに資産を
+  直接配置する方式は、インストーラが codex 本体の自動更新と共有する記録まで持っているため採らなかった
 
 ## [1.19.0] - 2026-10-15
 

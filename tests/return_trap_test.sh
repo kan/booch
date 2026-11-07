@@ -61,8 +61,6 @@ _rt_stubs() {
   booch_verify_pick() { :; }
   booch_go_arch() { printf amd64; }
   booch_go_expected_sha256() { printf deadbeef; }
-  # codex: 実環境の ~/.codex を見ないよう、存在しないパスへ向ける。
-  booch_codex_standalone_dir() { printf '/nonexistent/booch-rt/standalone'; }
 }
 
 # func + args を「set -u 下の呼び出し元 return」から駆動し、落ちずに DONE まで到達するか。
