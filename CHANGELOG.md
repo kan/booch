@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-11-07
+
 ### Added
 
 - `lib/apt.sh` の `booch_apt_add_repo` / `booch_apt_install_key` が、省略できる最後の引数で keyring の主鍵の
@@ -694,6 +696,7 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
+[1.20.0]: https://github.com/kan/booch/releases/tag/v1.20.0
 [1.19.0]: https://github.com/kan/booch/compare/v1.18.2...v1.19.0
 [1.18.2]: https://github.com/kan/booch/compare/v1.18.1...v1.18.2
 [1.18.1]: https://github.com/kan/booch/compare/v1.18.0...v1.18.1
