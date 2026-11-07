@@ -48,7 +48,7 @@ booch/
 │   ├── color.sh                  # 色（ANSI）の共通定義（tty/NO_COLOR gate）
 │   ├── arch.sh                   # アーキテクチャ名の解決（dpkg 系 / rust 系）
 │   ├── os.sh                     # OS 検出（os-release → BOOCH_OS_*）
-│   ├── apt.sh                    # APT リポジトリ追加・コードネーム解決
+│   ├── apt.sh                    # APT リポジトリ追加（鍵の fingerprint 照合つき）・コードネーム解決
 │   ├── doctor.sh                 # 診断レポートのフレーム（行描画・バージョン比較・集計）
 │   ├── github.sh                 # GitHub Releases（最新タグ取得・資産ダウンロード）
 │   ├── verify.sh                 # 取得物の SHA256 検証（upstream のチェックサムと照合）
@@ -279,6 +279,13 @@ bash-concurrent で採用）は使えない。代わりに **upstream が公開�
 
 検証付きツールは、取得物のハッシュが期待値と一致しなければ、展開や `sudo` での導入へ進まず
 失敗する。未検証ツールは「HTTPS ＋ 配布元の真正性」に依存する。
+
+APT のサードパーティリポジトリの keyring は、主鍵の fingerprint で照合できる。`install.sh` は gh の
+keyring を、上流が公開する fingerprint で照合してから置く。`lib/apt.sh` の `booch_apt_add_repo` は、
+呼び出し側が最後の引数で fingerprint を渡したときだけ照合する（渡さなければ HTTPS の真正性に依存する）。
+渡した場合は、置いてある keyring も毎回照合し、外れていれば取り直す。取り直した keyring も外れれば、
+古い keyring を書き換えずに警告して続行する。値は上流が公開しているものを使い、上流が鍵を替えたら
+呼び出し側で直す。
 
 ## リポジトリのセキュリティ施策
 

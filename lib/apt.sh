@@ -15,12 +15,22 @@
 #     "/etc/apt/keyrings/docker.asc" raw \
 #     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${codename} stable"
 #
+# 6 番目の引数（省略可）は keyring の主鍵の fingerprint（空白区切りで複数可）。渡すと、取得した
+# keyring の主鍵がすべてこの中に含まれるときだけ置く。値は上流が公開しているものを写し、
+# 取得した keyring から写さない。上流が鍵を足したり替えたりしたら、呼び出し側で値を直す。
+# 例: gh（上流が https://github.com/cli/cli/blob/trunk/docs/install_linux.md の冒頭で公開）
+#   booch_apt_add_repo github-cli \
+#     "https://cli.github.com/packages/githubcli-archive-keyring.gpg" \
+#     "/etc/apt/keyrings/githubcli-archive-keyring.gpg" raw \
+#     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+#     "2C6106201985B60E6C7AC87323F3D4EA75716059 7F38BBB59D064DBCB3D84D725612B36462313325"
+#
 # 依存: curl, gpg, sudo, dpkg（呼び出し側）, install, tee。
 #
 # テスト用の継ぎ目（seam）。次を上書きすると sudo / network 無しで純粋ロジック
 # （フォールバック判定・冪等スキップ）を検証できる:
 #   booch_apt_dist_exists <base-url> <codename>   dists/<codename>/Release の存在
-#   booch_apt_install_key <url> <keyring> <mode>  鍵取得と keyring 配置（mode: dearmor|raw）
+#   booch_apt_install_key <url> <keyring> <mode> [fprs]  鍵取得・照合と keyring 配置（mode: dearmor|raw）
 #   booch_apt_write_list  <name> <deb-line>       sources.list.d/<name>.list 生成
 #   booch_apt_keyring_records <keyring>           keyring の鍵レコード（gpg コロン形式）
 #
@@ -46,11 +56,13 @@ booch_apt_dist_exists() { # base-url codename
 }
 
 # 鍵を取得して keyring に配置する。mode=dearmor なら gpg --dearmor、raw ならそのまま。
+# fprs（空白区切りの主鍵の fingerprint）を渡すと、配置する前に booch_apt_verify_keyring で
+# 照合し、外れれば keyring を書き換えずに非 0 を返す。省略すれば照合しない。
 # add_repo からは `... || return 1` で呼ばれるため、その文脈では本体の errexit が
 # 無効になる。各 sudo ステップの失敗を明示的に判定し、1 つでも失敗したら非 0 を返す
 # （成功扱いで write_list へ進み、鍵の無い壊れた .list を残さないため）。
-booch_apt_install_key() { # url keyring mode
-  local url=$1 keyring=$2 mode=$3
+booch_apt_install_key() { # url keyring mode [fprs]
+  local url=$1 keyring=$2 mode=$3 fprs=${4:-}
   case "$mode" in
     dearmor | raw) ;;
     *) echo "apt: 未知の key mode: $mode（dearmor|raw）" >&2; return 2 ;;
@@ -64,7 +76,8 @@ booch_apt_install_key() { # url keyring mode
 
   # curl を temp に落としてから処理する（パイプにせず失敗を確実に捕捉する）。期限切れの
   # 取り直しで毎回の setup がここを通るので、応答しない網でぶら下がらないよう時間を切る。
-  if ! curl -fsSL --max-time 30 "$url" -o "$tmp"; then
+  # --proto '=https' --tlsv1.2: リダイレクトで平文の http へ落ちることと、TLS の格下げを拒否する。
+  if ! curl --proto '=https' --tlsv1.2 -fsSL --max-time 30 "$url" -o "$tmp"; then
     echo "apt: 鍵の取得に失敗: $url" >&2
     return 1
   fi
@@ -79,6 +92,11 @@ booch_apt_install_key() { # url keyring mode
     bin=$armored
   else
     bin=$tmp
+  fi
+  # 照合も sudo の前に、配置する中身そのもので行う。
+  if [ -n "$fprs" ] && ! booch_apt_verify_keyring "$bin" "$fprs"; then
+    echo "apt: keyring の fingerprint が指定と一致しないので置かない: $url" >&2
+    return 1
   fi
   # 中身が既存と同じなら書かない（無駄な sudo と mtime の更新を避ける）。
   if [ -r "$keyring" ] && cmp -s "$bin" "$keyring"; then
@@ -125,11 +143,48 @@ booch_apt_resolve_codename() { # base-url wanted fallback [name]
   fi
 }
 
-# keyring の鍵レコードを gpg のコロン形式で返す（seam）。gpg が無い / 読めないときは
-# 空を返し、呼び出し側は「判定不能」として扱う。
+# keyring の鍵レコードを gpg のコロン形式で返す（seam）。gpg が無いときは空で 0 を返し、
+# 読めないときは gpg の終了コードを返す。期限の判定（booch_apt_keyring_expiry）は空を
+# 「判定不能」として扱い、照合（booch_apt_verify_keyring）は gpg の有無と終了コードを見る。
+# --show-keys は import しないが、利用者の ~/.gnupg を作ったり触ったりしないよう、使い捨ての
+# GNUPGHOME で読む。
 booch_apt_keyring_records() { # keyring
   command -v gpg >/dev/null 2>&1 || return 0
-  gpg --show-keys --with-colons "$1" 2>/dev/null
+  local home rc=0
+  home=$(mktemp -d) || return 1
+  GNUPGHOME="$home" gpg --batch --show-keys --with-colons "$1" 2>/dev/null || rc=$?
+  rm -rf "$home"
+  return "$rc"
+}
+
+# keyring の主鍵が 1 本以上あり、すべて fprs（空白区切りの fingerprint）に含まれるかを
+# 確かめる（含まれれば 0）。「指定した鍵を 1 本でも含めば通す」にすると、鍵を足された
+# keyring も通ってしまう（apt は keyring の鍵をすべて信用する）ので、1 本でも外れれば落とす。
+# gpg が無い、または gpg が keyring の一部を読めなかったときも落とす（照合できない鍵を
+# 通さないため）。fingerprint の大文字小文字は区別しない。
+# install.sh の booch_install_verify_gh_keyring が同じ規則で照合している（install.sh は
+# 自己完結のため共有できない）。規則を変えるときは両方を直す。
+booch_apt_verify_keyring() { # keyring fprs
+  local keyring=$1 want=() pinned records got fpr
+  command -v gpg >/dev/null 2>&1 || { echo "apt: keyring の照合に gpg が要る" >&2; return 1; }
+  # 改行やタブで区切って渡されても受ける。照合用の一覧は空白で区切って両端に空白を付け、
+  # " <fpr> " の部分一致で集合に含まれるかを見る（fingerprint は空白を含まない 16 進）。
+  # "${want[*]}" は IFS の先頭文字で区切るので使わず、printf で組む（呼び出し側の IFS に左右されない）。
+  local spec=${2:-}
+  IFS=$' \t\n' read -r -d '' -a want <<<"${spec^^}" || true
+  [ "${#want[@]}" -gt 0 ] || { echo "apt: 照合する fingerprint が空" >&2; return 1; }
+  pinned=" $(printf '%s ' "${want[@]}")"
+  records=$(booch_apt_keyring_records "$keyring") \
+    || { echo "apt: keyring を gpg で読めない（gpg が古い、または読めない鍵が入っている）: $keyring" >&2; return 1; }
+  # fpr 行は pub の直後が主鍵、sub の直後が副鍵。主鍵だけを取り出す。
+  got=$(printf '%s\n' "$records" | awk -F: '$1 == "pub" { p = 1; next } $1 == "fpr" && p { print toupper($10) } { p = 0 }')
+  [ -n "$got" ] || { echo "apt: keyring に鍵が無い: $keyring" >&2; return 1; }
+  while IFS= read -r fpr; do
+    case "$pinned" in
+      *" $fpr "*) ;;
+      *) echo "apt: keyring に指定外の鍵がある: $fpr" >&2; return 1 ;;
+    esac
+  done <<<"$got"
 }
 
 # keyring の署名鍵が「いつまで使えるか」を 1 語で返す。値は次のいずれか:
@@ -187,8 +242,10 @@ booch_apt_keyring_usable() { # keyring [grace-days]
 
 # サードパーティ repo を追加する（冪等: 既に <name>.list があれば何もしない）。
 # deb 行は呼び出し側が組み立てて渡す（arch / signed-by / codename の差異を吸収する）。
-booch_apt_add_repo() { # name key-url keyring mode deb-line
-  local name=$1 key_url=$2 keyring=$3 mode=$4 deb_line=$5
+# fprs（空白区切りの主鍵の fingerprint）を渡すと、取得した keyring を照合してから置く
+# （booch_apt_install_key）。既に置いてある keyring も毎回照合し、外れていれば取り直す。
+booch_apt_add_repo() { # name key-url keyring mode deb-line [fprs]
+  local name=$1 key_url=$2 keyring=$3 mode=$4 deb_line=$5 fprs=${6:-}
   # name はファイル名になるため、ディレクトリ脱出を防ぐ（呼び出し側は信頼するが安全側）。
   case "$name" in
     "" | */* | .*) echo "apt: 不正な repo 名: $name" >&2; return 2 ;;
@@ -196,13 +253,22 @@ booch_apt_add_repo() { # name key-url keyring mode deb-line
   # 完了マーカは <name>.list だが、鍵だけ消えた半端な状態を自己修復するため keyring の
   # 可読性も確認する。両方そろっていれば導入済みとみなしスキップ、欠けていれば入れ直す。
   if [ -f "$BOOCH_APT_SOURCES_DIR/$name.list" ] && [ -r "$keyring" ]; then
-    booch_apt_keyring_usable "$keyring" && return 0
     # 鍵の期限切れは .list の有無では分からないので、ここでだけ取り直す（上流は期限前に
-    # 新鍵を足した keyring へ差し替えるのが通例）。取り直せなくても repo 自体は既にある
+    # 新鍵を足した keyring へ差し替えるのが通例）。fprs があれば、置いてある keyring も照合する
+    # （fprs を渡す前に置いた keyring にも効かせるため）。取り直せなくても repo 自体は既にある
     # ので、警告して続行する ―― repo 追加が本来の役目で、検証の可否は apt update が示す。
-    printf '%s[WARN]%s %s の署名鍵が期限切れ（または期限間近）です。鍵を取り直します。\n' \
-      "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$name" >&2
-    if ! booch_apt_install_key "$key_url" "$keyring" "$mode"; then
+    # 取り直した鍵が fingerprint の照合に落ちたときも同じ（古い keyring は書き換えない）。
+    local reason
+    if [ -n "$fprs" ] && ! booch_apt_verify_keyring "$keyring" "$fprs" 2>/dev/null; then
+      reason="置いてある keyring が指定の fingerprint と一致しません（または読めません）"
+    elif ! booch_apt_keyring_usable "$keyring"; then
+      reason="署名鍵が期限切れ（または期限間近）です"
+    else
+      return 0
+    fi
+    printf '%s[WARN]%s %s: %s。鍵を取り直します。\n' \
+      "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$name" "$reason" >&2
+    if ! booch_apt_install_key "$key_url" "$keyring" "$mode" "$fprs"; then
       printf '%s[WARN]%s %s の鍵を取り直せませんでした: %s\n' \
         "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$name" "$key_url" >&2
     elif ! booch_apt_keyring_usable "$keyring"; then
@@ -211,7 +277,7 @@ booch_apt_add_repo() { # name key-url keyring mode deb-line
     fi
     return 0
   fi
-  booch_apt_install_key "$key_url" "$keyring" "$mode" || return 1
+  booch_apt_install_key "$key_url" "$keyring" "$mode" "$fprs" || return 1
   booch_apt_write_list "$name" "$deb_line"
 }
 
