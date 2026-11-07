@@ -83,9 +83,11 @@ booch は WSL2 / Ubuntu 向けの再実行可能な開発環境ブートスト�
 - 取得物の信頼モデル: 取得は HTTPS ＋ 公式配布元に依存する（README「セキュリティ」
   参照）。upstream がチェックサムを公開しているツールは `lib/verify.sh` で SHA256 を
   照合する（go / circleci / starship で導入済み。展開や `sudo` での導入の前に弾く）。codex は公式
-  インストーラ自身がパッケージの SHA256 を照合する（インストーラは下の digest で照合してから実行する）。upstream が
-  チェックサムを出していない GitHub Releases の資産（delta / shellcheck / codex の `install.sh`）は、Releases API が資産に付ける
-  digest で照合する（`booch_github_verify_asset`）。aws は未検証。新規
+  インストーラ自身がパッケージの SHA256 を照合する。upstream が
+  チェックサムを出していない GitHub Releases の資産（delta / shellcheck）は、Releases API が資産に付ける
+  digest で照合する（`booch_github_verify_asset`）。codex の `install.sh` も同じ digest で照合するが、
+  **`booch_github_verify_asset` に置き換えない**（この関数は digest が無いと警告して通す。取得した
+  スクリプトをそのまま実行する経路では、digest が無いときも中断する必要がある）。aws は未検証。新規
   ジョブで upstream が `.sha256` / `checksums.txt` を出していれば `booch_verify_sha256`
   ＋ `booch_verify_pick` で照合を組み込む（starship のようにファイル名を含まない per-asset の
   `.sha256` は `booch_verify_pick` を通さず先頭のハッシュを渡す）。チェックサムが無く GitHub Releases から

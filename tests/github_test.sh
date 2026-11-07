@@ -15,6 +15,13 @@ source "$TESTS_DIR/lib.sh"
 source "$BOOCH_ROOT/lib/github.sh"
 
 # --- booch_github_latest_tag ---
+# 照合に使う digest も API から取るので、http への格下げと TLS の格下げを拒否する。
+test_github_api_rejects_downgrade() {
+  local opts
+  opts=$(curl() { printf ' %s ' "$*"; }; booch_github_api repos/o/r)
+  assert_contains "$opts" " --proto =https --tlsv1.2 "
+  assert_contains "$opts" "https://api.github.com/repos/o/r"
+}
 test_github_latest_tag_parses_tag() {
   booch_github_api() { printf '{"tag_name":"v1.2.3"}'; }
   assert_eq "v1.2.3" "$(booch_github_latest_tag owner/repo)"

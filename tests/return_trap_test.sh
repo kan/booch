@@ -57,6 +57,8 @@ _rt_stubs() {
   booch_github_download_asset() { return 0; }
   # digest の照合で止まると、その後ろ（パージ / 導入）を通らず回帰ガードにならない。
   booch_github_verify_asset() { return 0; }
+  # codex は digest を直接引いて照合する。空だと取得の段階で中断し、インストーラの実行まで通らない。
+  booch_github_asset_digest() { printf deadbeef; }
   booch_verify_sha256() { return 0; }
   booch_verify_pick() { :; }
   booch_go_arch() { printf amd64; }

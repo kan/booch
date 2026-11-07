@@ -159,9 +159,10 @@ test_codex_install_returns_installer_status() {
 _CODEX_INSTALLER_BODY='#!/bin/sh
 echo installer'
 _codex_installer_sha() { printf '%s' "$_CODEX_INSTALLER_BODY" | sha256sum | awk '{print $1}'; }
-_codex_fetch_rc() { # → rc。cap_digest / cap_url に呼び出しを記録する
+_codex_fetch_rc() { # → rc。cap_url / cap_opts に呼び出しを記録する
   curl() {
     local o=""
+    cap_opts=" $* "
     while [ "$#" -gt 0 ]; do
       case "$1" in -o) o=$2; shift ;; https://*) cap_url=$1 ;; esac
       shift
@@ -174,7 +175,7 @@ _codex_fetch_rc() { # → rc。cap_digest / cap_url に呼び出しを記録す�
   return "$rc"
 }
 test_codex_fetch_installer_uses_tag_asset_and_verifies() {
-  local cap_url="" rc
+  local cap_url="" cap_opts="" rc
   # コマンド置換の中で呼ばれるので記録は残らない。引数が期待どおりのときだけ digest を返す。
   booch_github_asset_digest() {
     [ "$1 $2 $3" = "openai/codex rust-v0.20.0 install.sh" ] || return 1
@@ -182,6 +183,7 @@ test_codex_fetch_installer_uses_tag_asset_and_verifies() {
   }
   if _codex_fetch_rc; then rc=0; else rc=$?; fi
   assert_status 0 "$rc" "タグの install.sh の digest を引いて照合が通る"
+  assert_contains "$cap_opts" " --proto =https --tlsv1.2 " "http への格下げと TLS の格下げを拒否する"
   assert_eq "https://github.com/openai/codex/releases/download/rust-v0.20.0/install.sh" "$cap_url"
 }
 test_codex_fetch_installer_fails_on_digest_mismatch() {
