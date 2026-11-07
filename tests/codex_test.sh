@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # jobs/codex.sh のユニットテスト。seam をスタブで差し替え、分岐・インストーラの呼び方・
-# 旧版の掃除・旧単体バイナリの削除・arch を検証する。
+# インストーラの取得と照合・旧単体バイナリの削除・arch を検証する。
 
 # stub（uname/seam）は間接呼び出しで shellcheck から到達不能に見える
 # shellcheck disable=SC2317,SC2329
@@ -19,9 +19,8 @@ source "$BOOCH_ROOT/lib/github.sh"
 # shellcheck source=jobs/codex.sh
 source "$BOOCH_ROOT/jobs/codex.sh"
 
-# 実環境の ~/.codex と /usr/local/bin/codex に触れないよう、既定では存在しないパスへ向ける
-# （job_codex は旧単体バイナリの削除を sudo で試みる）。個々のテストが必要に応じて上書きする。
-booch_codex_standalone_dir() { printf '/nonexistent/booch-test/standalone'; }
+# 実環境の ~/.local/bin/codex と /usr/local/bin/codex に触れないよう、既定では存在しないパスへ
+# 向ける（job_codex は旧単体バイナリの削除を sudo で試みる）。個々のテストが必要に応じて上書きする。
 booch_codex_legacy_path() { printf '/nonexistent/booch-test/codex'; }
 export CODEX_INSTALL_DIR=/nonexistent/booch-test/bin
 sudo() { echo "テストから sudo が呼ばれた: $*" >&2; return 1; }
@@ -137,18 +136,76 @@ test_codex_job_passes_normalized_version_to_install() {
   assert_eq "0.20.0" "$cap_ver"
 }
 
-# --- booch_codex_install（取得 / 実行 / 掃除の seam をスタブ） ---
-# install は受け取った版をインストーラへ渡し、成功後に直前の版を残して旧版を掃除する。
+# --- booch_codex_install（取得 / 実行の seam をスタブ） ---
+# install は受け取った版で、その版のインストーラを取り、その版を指定して実行する。
 # 捕捉変数は install のローカルと衝突しない名前。
-test_codex_install_passes_version_to_installer() {
-  local cap_ver="" cap_keep=""
-  booch_codex_current_release() { printf '0.19.0-t'; }
-  booch_codex_fetch_installer() { : > "$1"; }
+test_codex_install_passes_version_to_fetch_and_installer() {
+  local cap_fetch="" cap_ver=""
+  booch_codex_fetch_installer() { cap_fetch=$2; : > "$1"; }
   booch_codex_run_installer() { cap_ver=$2; }
-  booch_codex_prune_releases() { cap_keep=$1; }
   booch_codex_install 0.20.0
+  assert_eq "0.20.0" "$cap_fetch"
   assert_eq "0.20.0" "$cap_ver"
-  assert_eq "0.19.0-t" "$cap_keep"
+}
+test_codex_install_returns_installer_status() {
+  booch_codex_fetch_installer() { : > "$1"; }
+  booch_codex_run_installer() { return 3; }
+  local rc; if booch_codex_install 0.20.0 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 3 "$rc"
+}
+
+# --- booch_codex_fetch_installer（GitHub の資産を取り、digest で照合する） ---
+# curl は -o の先へ固定の中身を書き、URL を記録するスタブにする。照合は本物の booch_verify_sha256。
+_CODEX_INSTALLER_BODY='#!/bin/sh
+echo installer'
+_codex_installer_sha() { printf '%s' "$_CODEX_INSTALLER_BODY" | sha256sum | awk '{print $1}'; }
+_codex_fetch_rc() { # → rc。cap_url / cap_opts に呼び出しを記録する
+  curl() {
+    local o=""
+    cap_opts=" $* "
+    while [ "$#" -gt 0 ]; do
+      case "$1" in -o) o=$2; shift ;; https://*) cap_url=$1 ;; esac
+      shift
+    done
+    printf '%s' "$_CODEX_INSTALLER_BODY" > "$o"
+  }
+  local d rc; d=$(mktemp -d)
+  if booch_codex_fetch_installer "$d/install.sh" 0.20.0 2>/dev/null; then rc=0; else rc=$?; fi
+  rm -rf "$d"
+  return "$rc"
+}
+test_codex_fetch_installer_uses_tag_asset_and_verifies() {
+  local cap_url="" cap_opts="" rc
+  # コマンド置換の中で呼ばれるので記録は残らない。引数が期待どおりのときだけ digest を返す。
+  booch_github_asset_digest() {
+    [ "$1 $2 $3" = "openai/codex rust-v0.20.0 install.sh" ] || return 1
+    _codex_installer_sha
+  }
+  if _codex_fetch_rc; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc" "タグの install.sh の digest を引いて照合が通る"
+  assert_contains "$cap_opts" " --proto =https --tlsv1.2 " "http への格下げと TLS の格下げを拒否する"
+  assert_eq "https://github.com/openai/codex/releases/download/rust-v0.20.0/install.sh" "$cap_url"
+}
+test_codex_fetch_installer_fails_on_digest_mismatch() {
+  local cap_url="" rc
+  booch_github_asset_digest() { printf '%064d' 0; }
+  if _codex_fetch_rc; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+# delta と違い、digest が無ければ照合せずに通すことはしない（取得物をそのまま実行するため）。
+test_codex_fetch_installer_fails_without_digest() {
+  local cap_url="" rc
+  booch_github_asset_digest() { :; }
+  if _codex_fetch_rc; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "" "$cap_url" "照合できないなら取得もしない"
+}
+test_codex_fetch_installer_fails_when_api_fails() {
+  local cap_url="" rc
+  booch_github_asset_digest() { return 1; }
+  if _codex_fetch_rc; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "" "$cap_url"
 }
 test_codex_install_fails_when_fetch_fails() {
   local cap_run=""
@@ -158,17 +215,6 @@ test_codex_install_fails_when_fetch_fails() {
   assert_status 1 "$rc"
   assert_eq "" "$cap_run"
 }
-# インストーラが失敗したら、旧版の掃除に進まない。
-test_codex_install_fails_when_installer_fails() {
-  local cap_pruned=""
-  booch_codex_fetch_installer() { : > "$1"; }
-  booch_codex_run_installer() { return 1; }
-  booch_codex_prune_releases() { cap_pruned=yes; }
-  local rc; if booch_codex_install 0.20.0 2>/dev/null; then rc=0; else rc=$?; fi
-  assert_status 1 "$rc"
-  assert_eq "" "$cap_pruned"
-}
-
 # --- job_codex からの旧単体バイナリの削除 ---
 # 導入済み（installed が空でない）なら導入先に偽の codex を置き、版は最新と一致させて
 # 導入を呼ばない状態で job_codex を走らせる。旧単体バイナリの削除は cap_legacy に記録する。
@@ -219,52 +265,6 @@ EOF
   assert_eq "/realhome/.local/bin" "${lines[2]}"
   assert_eq "true" "${lines[3]}"
   assert_eq "--release 0.20.0" "${lines[4]}"
-  rm -rf "$d"
-}
-
-# --- 旧版の掃除 ---
-_standalone_fixture() { # root versions...
-  local root=$1; shift
-  mkdir -p "$root/releases/.staging.x"
-  local v; for v in "$@"; do mkdir -p "$root/releases/$v"; done
-}
-test_codex_prune_keeps_current_and_previous() {
-  local d; d=$(mktemp -d)
-  _standalone_fixture "$d" 0.1.0-t 0.2.0-t 0.3.0-t
-  ln -s "$d/releases/0.3.0-t" "$d/current"
-  booch_codex_standalone_dir() { printf '%s' "$d"; }
-  booch_codex_prune_releases 0.2.0-t
-  assert_eq "0.2.0-t 0.3.0-t" "$(cd "$d/releases" && echo *)"
-  [ -d "$d/releases/.staging.x" ] || { echo "staging を消した"; return 1; }
-  rm -rf "$d"
-}
-# 基準のディレクトリが symlink 経由でも、current を消さない（パスでの比較に対する回帰ガード）。
-test_codex_prune_keeps_current_via_symlinked_root() {
-  local d; d=$(mktemp -d)
-  _standalone_fixture "$d/real" 0.1.0-t 0.3.0-t
-  ln -s "$d/real" "$d/link"
-  ln -s "$d/real/releases/0.3.0-t" "$d/real/current"
-  booch_codex_standalone_dir() { printf '%s' "$d/link/"; }
-  booch_codex_prune_releases ""
-  assert_eq "0.3.0-t" "$(cd "$d/real/releases" && echo *)"
-  rm -rf "$d"
-}
-test_codex_prune_without_previous_keeps_only_current() {
-  local d; d=$(mktemp -d)
-  _standalone_fixture "$d" 0.1.0-t 0.3.0-t
-  ln -s "$d/releases/0.3.0-t" "$d/current"
-  booch_codex_standalone_dir() { printf '%s' "$d"; }
-  booch_codex_prune_releases ""
-  assert_eq "0.3.0-t" "$(cd "$d/releases" && echo *)"
-  rm -rf "$d"
-}
-# current が無い（インストーラの配置が想定と違う）ときは何も消さない。
-test_codex_prune_noop_without_current() {
-  local d; d=$(mktemp -d)
-  _standalone_fixture "$d" 0.1.0-t 0.3.0-t
-  booch_codex_standalone_dir() { printf '%s' "$d"; }
-  booch_codex_prune_releases ""
-  assert_eq "0.1.0-t 0.3.0-t" "$(cd "$d/releases" && echo *)"
   rm -rf "$d"
 }
 

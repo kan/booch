@@ -37,8 +37,9 @@ if ! declare -F booch_verify_sha256 >/dev/null 2>&1; then
   unset _booch_github_verify
 fi
 
+# 照合に使う digest もここから取るので、リダイレクトで平文の http へ落ちることと TLS の格下げを拒否する。
 booch_github_api() { # path
-  curl -fsSL --max-time 15 "https://api.github.com/$1"
+  curl --proto '=https' --tlsv1.2 -fsSL --max-time 15 "https://api.github.com/$1"
 }
 
 booch_github_fetch() { # url dest
