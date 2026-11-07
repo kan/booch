@@ -1,0 +1,40 @@
+name: gh keyring
+
+# install.sh が固定している gh の keyring の fingerprint（_BI_GH_KEY_FPRS）を、上流の今の
+# keyring で照合する。上流が鍵を足したり替えたりすると install.sh は keyring を置かずに
+# 中断するので、素の OS で実行して初めて気付くことにならないよう、週 1 回ここで落とす。
+# 落ちたら、上流が公開している fingerprint
+# （https://github.com/cli/cli/blob/trunk/docs/install_linux.md）を確かめてから install.sh を直す。
+on:
+  schedule:
+    - cron: "0 0 * * 1"  # 毎週月曜 09:00 JST
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - install.sh
+      - .github/workflows/gh-keyring.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # 実際に動く commit は .github/workflows/actions.lock が固定する（タグ付け替えを防ぐ）。
+      # uses: を変えたら gh actions-lock を流し直す。版の更新は Dependabot が lockfile ごと PR で運ぶ。
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      # install.sh と同じ関数（取得と照合）を使い、照合の中身を二重に持たない。
+      - name: 上流の gh keyring を install.sh の fingerprint で照合する
+        run: |
+          set -euo pipefail
+          BOOCH_INSTALL_NO_RUN=1
+          source install.sh
+          kr="$RUNNER_TEMP/githubcli-archive-keyring.gpg"
+          booch_install_fetch_gh_keyring "$kr"
+          booch_install_verify_gh_keyring "$kr"
+          echo "gh keyring: install.sh の fingerprint と一致"

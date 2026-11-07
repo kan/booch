@@ -19,6 +19,14 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - 変更は main へ直接 push せず、PR で入れる運用に変えた。tagpr はマージされた PR からリリース PR を組み立てる
   ため
 
+### Security
+
+- `install.sh` が gh の apt リポジトリの keyring を、主鍵の fingerprint で照合してから置くようにした（#23）。
+  keyring の主鍵がすべて上流の公開する fingerprint に含まれなければ、keyring も deb 行も置かずに中断する。
+  照合に使う `gpg` が無ければ、gh を入れるときに一緒に apt で入れる
+  - `.github/workflows/gh-keyring.yml` が週 1 回、上流の今の keyring を同じ照合にかける。上流が鍵を足したり
+    替えたりして `install.sh` の固定値が古くなれば、ここで赤になる
+
 ## [1.19.0] - 2026-10-15
 
 ### Added

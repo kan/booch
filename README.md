@@ -31,7 +31,8 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/kan/booc
 ```
 
 `install.sh` は git / gh の確保 → gh 認証 → dotfiles の clone → submodule 初期化（または
-booch の sibling clone）→ dotfiles の setup 起動を冪等に行う。ライブラリとして直接使う場合や
+booch の sibling clone）→ dotfiles の setup 起動を冪等に行う。gh の apt リポジトリの keyring は、
+上流が公開する鍵の fingerprint で照合してから置く（照合用に `gpg` が無ければ入れる）。ライブラリとして直接使う場合や
 雛形をゼロから作る場合は下記「使い方」「利用側 dotfiles の作り方」を参照する。
 
 ## 構成

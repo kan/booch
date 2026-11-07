@@ -175,4 +175,81 @@ test_install_ensure_booch_stays_on_default_branch_without_tags() {
   rm -rf "$d"
 }
 
+# --- gh の keyring の fingerprint 照合（#23） ---
+# gpg --show-keys --with-colons の形。主鍵の fpr は pub の直後、副鍵の fpr は sub の直後。
+_gh_records() { # 主鍵の fingerprint...
+  local f
+  for f in "$@"; do
+    printf 'pub:-:4096:1:%s:1::::::sc::::::23::0:\nfpr:::::::::%s:\n' "${f: -16}" "$f"
+    printf 'sub:-:4096:1:0000000000000000:1::::::e::::::23:\nfpr:::::::::SUBKEY%s:\n' "${f: -16}"
+  done
+}
+test_install_verify_gh_keyring_accepts_pinned_keys() {
+  booch_install_gh_key_records() { _gh_records "${_BI_GH_KEY_FPRS[@]}"; }
+  local rc; if booch_install_verify_gh_keyring kr 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc" "副鍵の fingerprint は照合しない"
+}
+test_install_verify_gh_keyring_accepts_subset_of_pinned_keys() {
+  booch_install_gh_key_records() { _gh_records "${_BI_GH_KEY_FPRS[1]}"; }
+  local rc; if booch_install_verify_gh_keyring kr 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc" "上流が古い鍵を外しても通す"
+}
+test_install_verify_gh_keyring_ignores_caller_ifs() {
+  booch_install_gh_key_records() { _gh_records "${_BI_GH_KEY_FPRS[@]}"; }
+  local rc; if IFS=$'\n\t' booch_install_verify_gh_keyring kr 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc" "呼び出し側の IFS で照合が変わらない"
+}
+test_install_verify_gh_keyring_rejects_extra_key() {
+  booch_install_gh_key_records() { _gh_records "${_BI_GH_KEY_FPRS[@]}" AAAABBBBCCCCDDDDEEEEFFFF0000111122223333; }
+  local rc err; err=$(booch_install_verify_gh_keyring kr 2>&1) && rc=0 || rc=$?
+  assert_status 1 "$rc" "固定した鍵に足された鍵があれば落とす"
+  assert_contains "$err" "AAAABBBBCCCCDDDDEEEEFFFF0000111122223333"
+}
+test_install_verify_gh_keyring_rejects_empty_keyring() {
+  booch_install_gh_key_records() { :; }
+  local rc; if booch_install_verify_gh_keyring kr 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc" "鍵が 1 本も無ければ落とす"
+}
+test_install_verify_gh_keyring_rejects_unreadable_keyring() {
+  booch_install_gh_key_records() { return 2; }
+  local rc; if booch_install_verify_gh_keyring kr 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+}
+test_install_ensure_gh_repo_does_not_place_keyring_on_mismatch() {
+  local d; d=$(mktemp -d)
+  _BI_GH_KEYRING="$d/keyrings/gh.gpg"; _BI_GH_LIST="$d/gh.list"
+  # deb 行の sudo tee はパイプの先（サブシェル）で呼ばれるので、記録はファイルに取る。
+  sudo() { echo "$*" >> "$d/sudo.log"; }
+  dpkg() { echo amd64; }
+  booch_install_fetch_gh_keyring() { : > "$1"; }
+  booch_install_verify_gh_keyring() { return 1; }
+  local rc; if booch_install_ensure_gh_repo >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_eq "" "$(cat "$d/sudo.log" 2>/dev/null)" "照合に落ちたら keyring も deb 行も置かない"
+  rm -rf "$d"
+}
+test_install_ensure_gh_repo_places_verified_keyring() {
+  local d; d=$(mktemp -d)
+  _BI_GH_KEYRING="$d/keyrings/gh.gpg"; _BI_GH_LIST="$d/gh.list"
+  local cap verified=""
+  sudo() { echo "$*" >> "$d/sudo.log"; }   # 記録をファイルに取る理由は上のテストと同じ
+  dpkg() { echo amd64; }
+  booch_install_fetch_gh_keyring() { : > "$1"; }
+  booch_install_verify_gh_keyring() { verified=$1; }
+  booch_install_ensure_gh_repo >/dev/null 2>&1
+  cap=$(cat "$d/sudo.log")
+  assert_contains "$cap" "install -m 0644 $verified $d/keyrings/gh.gpg" "照合したファイルを置く"
+  assert_contains "$cap" "tee $d/gh.list"
+  assert_file_absent "$verified" "一時ファイルを消す"
+  rm -rf "$d"
+}
+test_install_prereqs_installs_gpg_with_gh() {
+  local cap=""
+  _bi_have() { [ "$1" = git ] || [ "$1" = curl ]; }   # gh / gpg が無い
+  booch_install_apt() { case "$1" in install) cap="$*" ;; esac; }
+  booch_install_ensure_gh_repo() { return 1; }
+  booch_install_prereqs >/dev/null 2>&1 || true
+  assert_eq "install -y gpg" "$cap" "gh を入れるときは照合用の gpg も入れる"
+}
+
 run_tests

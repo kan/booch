@@ -11,7 +11,8 @@
 #       --dir "$HOME/dotfiles" --repo youraccount/dotfiles
 #
 # 何をするか（各ステップ冪等。無ければ入れる / 既存なら更新）:
-#   1. 前提ツール（git / curl / gh）を確保する（不足分のみ。apt は sudo を使う）
+#   1. 前提ツール（git / curl / gh）を確保する（不足分のみ。apt は sudo を使う）。gh の keyring は
+#      fingerprint を照合してから置く（照合用に gpg も入れる）
 #   2. gh のブラウザ認証（private repo 取得のため。認証済みならスキップ）
 #   3. dotfiles repo を --dir へ clone（既存なら ff-only pull）
 #   4. submodule を初期化（submodule 方式で取り込んだ booch を取得）
@@ -53,6 +54,7 @@ booch_install_apt_update() {
 }
 
 # 1. 前提ツール。git / curl は universe、gh は github-cli の apt repo を足してから入れる。
+# gpg は gh の keyring の照合に使う（Ubuntu では optional で、素のイメージには無いことがある）。
 booch_install_prereqs() {
   if _bi_have git && _bi_have curl && _bi_have gh; then
     _bi_ok "git / curl / gh あり"; return 0
@@ -61,6 +63,7 @@ booch_install_prereqs() {
   local base=()
   _bi_have git  || base+=(git)
   _bi_have curl || base+=(curl)
+  _bi_have gh || _bi_have gpg || base+=(gpg)
   if [ "${#base[@]}" -gt 0 ]; then
     booch_install_apt_update || return 1
     booch_install_apt install -y "${base[@]}" || { _bi_err "前提ツールの導入に失敗: ${base[*]}"; return 1; }
@@ -73,20 +76,81 @@ booch_install_prereqs() {
   _bi_ok "git / curl / gh 用意"
 }
 
+# gh の apt リポジトリに署名する鍵の主鍵の fingerprint。上流が公開している値
+# （https://github.com/cli/cli/blob/trunk/docs/install_linux.md の冒頭）と同じにする。
+# 上流が鍵を足したり替えたりしたら、ここを直す。.github/workflows/gh-keyring.yml が週 1 回、
+# 上流の keyring をこの値で照合するので、ずれれば赤で気付く。
+_BI_GH_KEY_FPRS=(
+  2C6106201985B60E6C7AC87323F3D4EA75716059
+  7F38BBB59D064DBCB3D84D725612B36462313325
+)
+
+# keyring の鍵レコードを gpg のコロン形式で返す（seam）。--show-keys は import しないが、
+# 利用者の ~/.gnupg を作ったり触ったりしないよう、使い捨ての GNUPGHOME で読む。
+booch_install_gh_key_records() { # keyring
+  local home rc=0
+  home=$(mktemp -d) || return 1
+  GNUPGHOME="$home" gpg --batch --show-keys --with-colons "$1" 2>/dev/null || rc=$?
+  rm -rf "$home"
+  return "$rc"
+}
+
+# keyring の主鍵が 1 本以上あり、すべて _BI_GH_KEY_FPRS に含まれるかを確かめる。
+# 「固定した鍵を 1 本でも含めば通す」にすると、鍵を足された keyring も通ってしまう
+# （apt は keyring の鍵をすべて信用する）ので、1 本でも外れていれば落とす。
+booch_install_verify_gh_keyring() { # keyring
+  local records fprs fpr pinned
+  # gpg が一部の鍵を読めずに非 0 で終えたときも通さない（読めなかった鍵を照合できないため）。
+  records=$(booch_install_gh_key_records "$1") \
+    || { _bi_err "gh keyring を gpg で読めない（gpg が古い、または読めない鍵が入っている）"; return 1; }
+  # fpr 行は pub の直後が主鍵、sub の直後が副鍵。主鍵だけを取り出す。
+  fprs=$(printf '%s\n' "$records" | awk -F: '$1 == "pub" { p = 1; next } $1 == "fpr" && p { print $10 } { p = 0 }')
+  [ -n "$fprs" ] || { _bi_err "gh keyring に鍵が無い"; return 1; }
+  # fingerprint は空白を含まない 16 進なので、空白で区切った一覧への一致で集合に含まれるかを見られる。
+  # 一覧は printf で組む（"${arr[*]}" は IFS の先頭文字で区切るので、呼び出し側の IFS に左右される）。
+  pinned=" $(printf '%s ' "${_BI_GH_KEY_FPRS[@]}")"
+  while IFS= read -r fpr; do
+    case "$pinned" in
+      *" $fpr "*) ;;
+      *) _bi_err "gh keyring に想定外の鍵がある: $fpr"; return 1 ;;
+    esac
+  done <<<"$fprs"
+}
+
+# gh の keyring を取得する（seam）。
+# --proto '=https' --tlsv1.2: リダイレクトで平文の http へ落ちることと、TLS の格下げを拒否する。
+booch_install_fetch_gh_keyring() { # out-file
+  curl --proto '=https' --tlsv1.2 -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "$1"
+}
+
+# gh の apt リポジトリの keyring と deb 行の置き場所（テストで差し替える）。
+_BI_GH_KEYRING=/etc/apt/keyrings/githubcli-archive-keyring.gpg
+_BI_GH_LIST=/etc/apt/sources.list.d/github-cli.list
+
+# keyring を一時ファイル <tmp> へ取って照合し、通ったものだけを _BI_GH_KEYRING に置く。
+_bi_place_gh_keyring() { # tmp
+  booch_install_fetch_gh_keyring "$1" || { _bi_err "gh keyring の取得に失敗"; return 1; }
+  booch_install_verify_gh_keyring "$1" \
+    || { _bi_err "gh keyring の fingerprint が install.sh の固定値と一致しない。keyring を置かずに中断する"; return 1; }
+  local dir; dir=$(dirname "$_BI_GH_KEYRING")
+  sudo install -m 0755 -d "$dir" || { _bi_err "$dir の作成に失敗"; return 1; }
+  # apt は root 以外からも読むので 0644 で置く。
+  sudo install -m 0644 "$1" "$_BI_GH_KEYRING" || { _bi_err "gh keyring の配置に失敗"; return 1; }
+}
+
 # gh の公式 apt リポジトリを冪等に足す（keyring + deb 行）。booch 本体を使わず自己完結する。
+# 既に両方あれば何もしない（既存の keyring は照合しない）。
 booch_install_ensure_gh_repo() {
-  local kr=/etc/apt/keyrings/githubcli-archive-keyring.gpg
-  local list=/etc/apt/sources.list.d/github-cli.list
-  [ -f "$list" ] && [ -r "$kr" ] && return 0
+  [ -f "$_BI_GH_LIST" ] && [ -r "$_BI_GH_KEYRING" ] && return 0
   _bi_step "github-cli の apt リポジトリを追加する"
-  sudo install -m 0755 -d /etc/apt/keyrings || return 1
-  # --proto '=https' --tlsv1.2: リダイレクトで平文の http へ落ちることと、TLS の格下げを拒否する。
-  curl --proto '=https' --tlsv1.2 -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-    | sudo tee "$kr" >/dev/null || { _bi_err "gh keyring の取得に失敗"; return 1; }
-  sudo chmod go+r "$kr" || return 1
+  local tmp rc=0
+  tmp=$(mktemp) || return 1
+  _bi_place_gh_keyring "$tmp" || rc=1
+  rm -f "$tmp"
+  [ "$rc" -eq 0 ] || return 1
   local arch; arch=$(dpkg --print-architecture)
-  printf 'deb [arch=%s signed-by=%s] https://cli.github.com/packages stable main\n' "$arch" "$kr" \
-    | sudo tee "$list" >/dev/null || return 1
+  printf 'deb [arch=%s signed-by=%s] https://cli.github.com/packages stable main\n' "$arch" "$_BI_GH_KEYRING" \
+    | sudo tee "$_BI_GH_LIST" >/dev/null || return 1
 }
 
 # 2. gh 認証（未認証なら対話ログイン）。
