@@ -20,3 +20,7 @@ updates:
       - "dependencies"
       - "github-actions"
     open-pull-requests-limit: 5
+    ignore:
+      # tagpr.yml / tagpr-label.yml の uses: は scripts/tagpr/ と一緒に git subtree pull で上げる。
+      # SHA だけを上げる PR は、動く workflow から scripts/tagpr/ を置き去りにする
+      - dependency-name: "kan/tagpr-scripts*"
