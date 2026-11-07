@@ -6,6 +6,8 @@ workflows:
     '.github/workflows/ci.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-node@v7.1.0'
+    '.github/workflows/gh-keyring.yml':
+        - 'actions/checkout@v7.0.1'
     '.github/workflows/release.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-node@v7.1.0'

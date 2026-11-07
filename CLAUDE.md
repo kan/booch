@@ -133,6 +133,12 @@ lib にも同じく適用する。加えて:
 
 - **自己完結に保つ**。booch がまだ無い状態で走るため、booch の lib を source できない（gh の
   apt repo 追加なども install.sh 内にインライン）。冪等（無ければ入れる / 既存なら更新）。
+- **gh の keyring は主鍵の fingerprint（`_BI_GH_KEY_FPRS`）で照合してから置く**。照合は「keyring の主鍵が
+  すべて固定値に含まれる」こと。「固定値を 1 本でも含めば通す」に緩めない（鍵を足された keyring を通して
+  しまい、apt はその鍵も信用する）。`gh-keyring.yml` が週 1 回、上流の keyring を同じ照合にかける。
+  これが赤になったら、上流の公開する fingerprint（cli/cli の `docs/install_linux.md` の冒頭）を確かめてから
+  `_BI_GH_KEY_FPRS` を直す。取得した keyring の中身を見て固定値を合わせない（上流の公開値が正本）。
+  照合するのは新しく置く keyring だけで、keyring と deb 行が既にあれば照合せずに使う。
 - **副作用は seam に切り出す**（`booch_install_apt` / `_gh` / `_git` / `_exec`）。テストは
   `BOOCH_INSTALL_NO_RUN=1` で source し、seam をスタブして network/sudo/実行なしで分岐を検証する
   （`tests/install_test.sh`）。末尾の `main` 実行はこの env で抑止される。
