@@ -82,7 +82,9 @@ booch/
 │   ├── custom-job.sh             # 最小: booch を source して custom job を登録
 │   ├── bootstrap.sh              # 現実例: 提供ジョブを sudo 事前キャッシュ付きで一括導入
 │   └── lib-helpers.sh            # fs / confirm / sudo ヘルパーの小サンプル
-├── VERSION                       # SemVer（booch version / git タグ v<...> と一致）
+├── scripts/tagpr/                # リリースの処理（kan/tagpr-scripts の git subtree。手で編集しない）
+├── .tagpr                        # tagpr の設定（リリース PR とタグ。手順は CLAUDE.md「リリース手順」）
+├── VERSION                       # SemVer（booch version / git タグ v<...> と一致。リリース PR が上げる）
 └── CHANGELOG.md                  # 変更履歴（Keep a Changelog）
 ```
 
@@ -248,7 +250,8 @@ bash tests/smoke.sh      # ランナーのスモーク（失敗ジョブと time
 `tests/smoke.sh` はエンドツーエンドのスモークで、ランナーが正常終了、ステータス更新、
 各種サマリー、失敗ログの表示、タイムアウトをひととおり扱えるかを確認する。ユニットテストの
 代替ではない。GitHub Actions（`.github/workflows/ci.yml`）が push と pull request
-ごとに、構文チェック、shellcheck、ユニットテスト、スモークを実行する。
+ごとに、構文チェック、shellcheck、ユニットテスト、スモークを実行する。同じ CI で、
+`scripts/tagpr/` が `tagpr.yml` の呼ぶ commit と一致するかも確かめる。
 
 ## セキュリティ（取得物の信頼モデル）
 

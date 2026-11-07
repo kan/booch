@@ -11,6 +11,13 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
   移した。`uses:` は完全な版のタグ（`@v7.0.1`）で書き、実際に動く commit は lockfile が固定する。
   `verify-lockfile.yml` が PR と main への push で `gh actions-lock --verify` を回す。固定している commit は
   移行の前後で変わらない
+- リリースを [tagpr](https://github.com/Songmu/tagpr) に移した（#26）。main へのマージのたびにリリース PR
+  が作り直され、それをマージすると `VERSION` の更新、CHANGELOG の節の繰り上げ、annotated のタグ、GitHub
+  Release までが自動で進む。処理は [kan/tagpr-scripts](https://github.com/kan/tagpr-scripts) を
+  `scripts/tagpr/` に `git subtree` で取り込んで使う。タグの検査（annotated か、`VERSION` と一致するか）は
+  `release-tag.yml` から、Release を作る `release.yml` へ移した
+- 変更は main へ直接 push せず、PR で入れる運用に変えた。tagpr はマージされた PR からリリース PR を組み立てる
+  ため
 
 ## [1.19.0] - 2026-10-15
 
@@ -665,7 +672,6 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
-[Unreleased]: https://github.com/kan/booch/compare/v1.19.0...HEAD
 [1.19.0]: https://github.com/kan/booch/compare/v1.18.2...v1.19.0
 [1.18.2]: https://github.com/kan/booch/compare/v1.18.1...v1.18.2
 [1.18.1]: https://github.com/kan/booch/compare/v1.18.0...v1.18.1

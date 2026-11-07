@@ -150,13 +150,17 @@ bash -n bin/booch install.sh lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh t
 shellcheck -x bin/booch install.sh lib/*.sh jobs/*.sh vendor/update.sh examples/*.sh tests/*.sh
 bash tests/run.sh                                          # ユニットテスト
 bash tests/smoke.sh                                        # ランナースモーク（失敗/timeout 込み）
+node scripts/tagpr/verify-subtree.mjs                      # scripts/tagpr/ と tagpr.yml の SHA の一致（HEAD を見るので commit 後に回す）
 ```
+
+`scripts/tagpr/` は `.mjs` だけで `.sh` を含まないので、構文チェックと shellcheck のグロブには入れない。
 
 ## テスト
 
 `tests/` に外部依存のないユニットテストを置く。`bash tests/run.sh` でローカル実行、
 GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに同じ一式
-（構文チェック / shellcheck / ユニットテスト / ランナースモーク）を回す。
+（構文チェック / shellcheck / ユニットテスト / ランナースモーク）と、`scripts/tagpr/` の照合
+（`tagpr-subtree` ジョブ）を回す。
 
 - `tests/lib.sh`: 最小テストフレームワーク。`test_*` 関数をサブシェル + `set -e` で
   隔離実行し集計する。
@@ -198,6 +202,22 @@ GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに�
   - `vendor/bash-concurrent` は Dependabot 対象外で `vendor/update.sh`（sha256 ピン）で更新する。
 - **CodeQL は使わない**（Bash 非対応）。Code scanning は上記 ShellCheck → SARIF で代替する。
 
+## 変更の入れ方（PR 運用）
+
+**変更は main へ直接 push せず、ブランチを切って PR で入れる**（ルートに `.tagpr` がある）。
+tagpr はマージされた PR からリリース PR を組み立てるので、main へ直接 push した変更はリリースの
+組み立てから漏れる。ブランチの push、PR の作成、マージはユーザーの承認を得てから行う。
+
+- **利用者に届く変更は、その PR で `CHANGELOG.md` の `## [Unreleased]` に行を足す**。この節が
+  そのまま Release の本文になる。節の中は小見出し（`### Added` / `### Changed` / `### Fixed` など）で
+  分ける。書式の制約（節の中のリンクはインラインで書く、参照リンクを使わない、
+  `[Unreleased]` の compare リンクを置かない、など）は tagpr-scripts の README
+  「What the CHANGELOG has to look like」を正本にする。
+- **機能の追加（minor を上げる変更）は、その PR に `enhancement` ラベルを付ける**（`.tagpr` の
+  `minorLabels`）。付けなければ tagpr は patch を提案する。
+- **`VERSION` と CHANGELOG の版の節は手で書かない**。リリース PR で tagpr と
+  `scripts/tagpr/release-prepare.mjs` が書く。
+
 ## リリース手順
 
 バージョンの正本はルートの `VERSION`（SemVer 1 行）。`booch version`（`lib/runner.sh` の
@@ -205,24 +225,55 @@ GitHub Actions（`.github/workflows/ci.yml`）で push / pull request ごとに�
 （タグ + ノート）で行い、配布は clone / submodule（vendor 同梱で clone は自己完結。tarball は
 付けない）。消費側は submodule をリリースタグに pin する想定（README「booch 本体の取り込み」）。
 
-再現手順（**バージョン bump は勝手にやらない**。指示があってから）:
+リリースは [tagpr](https://github.com/Songmu/tagpr) で行う。処理は
+[kan/tagpr-scripts](https://github.com/kan/tagpr-scripts) の共通の workflow とスクリプトで、
+`scripts/tagpr/` に `git subtree` で取り込んでいる。各段の挙動と、run が失敗したときの扱いの
+正本は tagpr-scripts の README「The tagpr workflow」。
 
-1. `VERSION` を上げる（SemVer）。`booch version` が新版を返すことを確認
-2. `CHANGELOG.md` の `[Unreleased]` を新バージョンの節へ繰り上げ、日付と比較リンクを付ける
-3. 変更をコミット（日本語メッセージ。bump とノートを含む）
-4. タグを打って push: `git tag -a v1.1.0 -m v1.1.0 && git push origin v1.1.0`
-5. リリース作成: `gh release create v1.1.0 --title v1.1.0 --notes "<CHANGELOG の当該節>"`
+1. main へのマージのたびに `.github/workflows/tagpr.yml` がリリース PR を作り直す。`VERSION` と
+   CHANGELOG の版の節はリリース PR が書く
+2. 版は既定で patch。`enhancement` の PR がマージされていれば minor。リリース PR に
+   `tagpr:minor` / `tagpr:major` を付けても上げられる（`tagpr-label.yml` がラベルの変化で
+   リリース PR を作り直す）
+3. **リリース PR のマージがリリースの実行にあたる。バージョン bump と同じく、ユーザーの指示が
+   あってからマージする**。tagpr の run が赤のリリース PR はマージしない。リリース PR は
+   GITHUB_TOKEN で作られるので `ci.yml` などの PR の CI は走らない（検査結果が付かないのは正常）。
+   リリース PR が変えるのは `VERSION` と `CHANGELOG.md` だけで、検査は tagpr の run と
+   `release.yml` が担う
+4. マージ後の run がタグを打ち、そのタグで `release.yml` を起動する。`release.yml` はタグを検査し
+   （下記）、CHANGELOG の節を本文にして GitHub Release を作る
+
+プレリリース（`vX.Y.Z-rc.1`）は main に手で annotated のタグを打って push する。`release.yml` の
+`push: tags` が動き、本文は `## [Unreleased]` になる。`VERSION` は前の版のままにする（rc に
+書き換えると tagpr が版を書き換えられない）。`release.yml` はプレリリースのタグでは `VERSION` との
+一致を検査しない。
+
 README は版番号を固定で書かない（Release バッヂはリリースから自動で出し、取り込み手順は
 `vX.Y.Z` のプレースホルダ）。リリースのたびに README を書き換える必要は無いので、固定の版番号を
 README に書き足さない。
 
-**タグは annotated（`-a`）で打つ**。`-a` 無しの lightweight タグは `git describe`（`--tags`
+**タグは annotated で打つ**。lightweight タグは `git describe`（`--tags`
 無し）から無視され、利用側が `git submodule status` / `git describe` で pin 先を確認したときに
-1 つ前のリリースが表示される。過去のタグは lightweight / annotated が混在しているが、打ち直さず
+1 つ前のリリースが表示される。tagpr のタグは共通の workflow が annotated にする（tagpr-scripts の
+README「The tagpr workflow」）。手で打つタグは `git tag -a` で打つ。
+過去のタグは lightweight / annotated が混在しているが、打ち直さず
 今後のタグだけを揃える。配布済みのタグを貼り直しても、手元に古いタグを持つ clone は fetch で
 更新されず、種別が食い違うためである（過去版を pin して確認する側は `git describe --tags`
 を使えば混在の影響を受けない）。この前提（annotated であることと、`VERSION` とタグ名の一致）は
-`v*` タグの push で `.github/workflows/release-tag.yml` が検査するので、打ち間違えれば赤で気付く。
+`.github/workflows/release.yml` が Release を作る前に検査するので、打ち間違えれば赤で気付き、
+Release も作られない。
+
+CHANGELOG の末尾のリンクは、v1.19.0 までが `compare/vA...vB`、以降が `releases/tag/vX.Y.Z`。
+**過去の `compare/` のリンクは書き換えない**（形が混ざっても読み取りに支障は無い）。
+
+### scripts/tagpr の更新
+
+- **`scripts/tagpr/` を手で編集しない**。変更は kan/tagpr-scripts で行い、`git subtree pull -S` で
+  取り込む。手順の正本は tagpr-scripts の README「Changing it」。
+- **取り込んだ PR で、`tagpr.yml` と `tagpr-label.yml` の `uses: kan/tagpr-scripts/...@<SHA>` を
+  取り込んだ commit へ上げる**。CI の `tagpr-subtree` ジョブ（`verify-subtree.mjs`）が食い違いで落ちる。
+  Dependabot はこの行を上げない（`dependabot.yml` の `ignore`）。
+- **subtree を取り込んだ PR はマージコミットでマージする（squash しない）**。理由は tagpr-scripts の README「Changing it」。
 
 ## ドキュメントの保守
 
