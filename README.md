@@ -300,7 +300,7 @@ gomod / npm、CodeQL 等）はそのまま適用できない。構成に合わ�
 | Dependabot alerts / security updates | ✅ 採用 | 既知脆弱性のある Actions を検知し、自動で更新する（リポジトリ設定で有効化） |
 | Dependabot（gomod / npm 等） | — 非該当 | package manifest を持たないため対象外 |
 | Secret scanning / Push protection | ✅ 採用 | トークン等の混入を検出し、push を止める（GitHub 標準。有効化済み） |
-| Code scanning（CodeQL） | — 非該当 | CodeQL は Bash を直接サポートしない |
+| Code scanning（CodeQL） | ✅ 採用 | default setup（query suite は extended）。CodeQL は Bash を直接サポートしないので、解析するのは GitHub Actions のワークフローと `scripts/tagpr/` の JavaScript |
 | Code scanning（ShellCheck → SARIF） | ✅ 採用 | `.github/workflows/security.yml`。CodeQL の代替として ShellCheck の結果を Security タブへ連携。失敗ゲートは CI の `shellcheck -x` が担う |
 | ShellCheck の版揃え | ✅ 採用 | CI はランナー同梱版ではなく `jobs/shellcheck.sh` で最新版を導入し、手元と同じ版で検査する（「ローカルで赤、CI で緑」を防ぐ） |
 | vendor/bash-concurrent の追従 | ⚙️ 手動 | Dependabot 対象外。`vendor/update.sh`（sha256 ピン）で更新する |

@@ -2,12 +2,15 @@
 
 ## 脆弱性の報告
 
-booch に関する脆弱性を見つけた場合は、GitHub の Private vulnerability reporting で報告して
-ください（公開 issue に書くと、修正より先に脆弱性が知られてしまうため避けてください）。
+booch に脆弱性を見つけたら、公開の Issue には書かず、GitHub の [Private vulnerability reporting](https://github.com/kan/booch/security/advisories/new) から報告してください。報告の内容は、修正を公開するまでメンテナーにだけ見えます。
 
-1. リポジトリの [Security タブ](https://github.com/kan/booch/security) を開く
-2. "Report a vulnerability" を押す
-3. 内容（再現手順、想定される影響、可能なら修正案）を記載する
+報告には次の内容を書いてください。
+
+- 脆弱性の内容
+- 再現の手順
+- 想定される影響（可能なら修正案も）
+
+受け取った報告は、できるだけ早く確認して返信します。
 
 ## 取得物の信頼モデル
 
@@ -25,3 +28,5 @@ booch は依存パッケージを持たない Bash 製のため、一般的な�
 - Dependabot alerts / security updates: 既知脆弱性のある Actions を検知して更新する
 - Code scanning（ShellCheck → SARIF）: Bash 静的解析の結果を Security タブへ送る
   （CodeQL は Bash に対応していないため、その代わりに使う）
+- Code scanning（CodeQL default setup、extended）: CodeQL が対応する部分（GitHub Actions の
+  ワークフローと `scripts/tagpr/` の JavaScript）を解析する
