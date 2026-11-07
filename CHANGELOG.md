@@ -5,7 +5,21 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `lib/apt.sh` の `booch_apt_add_repo` / `booch_apt_install_key` が、省略できる最後の引数で keyring の主鍵の
+  fingerprint（空白区切りで複数可）を受け取るようにした（#29）。渡すと、取得した keyring の主鍵がすべてその中に
+  含まれるときだけ置き、外れれば keyring も deb 行も置かずに失敗する。既に置いてある keyring も毎回照合し、外れて
+  いれば取り直す。取り直し（期限切れのときも含む）で外れたときは、古い keyring を残して警告し、続行する。照合は
+  `booch_apt_verify_keyring` で単独でも使える
+
 ### Changed
+
+- `booch_apt_install_key` の curl に `--proto '=https' --tlsv1.2` を付けた（リダイレクトで平文の http へ落ちることと、
+  TLS の格下げを拒否する）
+
+- `booch_apt_keyring_records` は `gpg` を使い捨ての `GNUPGHOME` で呼ぶようにした。利用者の `~/.gnupg` を作ったり
+  触ったりしない
 
 - GitHub Actions の版の固定を、`uses:` の commit SHA から workflow lockfile（`.github/workflows/actions.lock`）へ
   移した。`uses:` は完全な版のタグ（`@v7.0.1`）で書き、実際に動く commit は lockfile が固定する。

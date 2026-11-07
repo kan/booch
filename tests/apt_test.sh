@@ -384,6 +384,182 @@ test_apt_add_repo_skips_when_key_usable() {
   assert_eq "0" "$called" "鍵が有効ならスキップする"
 }
 
+# --- keyring の fingerprint 照合（#29） ---
+# gpg --show-keys --with-colons の形。主鍵の fpr は pub の直後、副鍵の fpr は sub の直後。
+_APT_FPR_A=2C6106201985B60E6C7AC87323F3D4EA75716059
+_APT_FPR_B=7F38BBB59D064DBCB3D84D725612B36462313325
+_apt_fpr_records() { # 主鍵の fingerprint...
+  local f
+  for f in "$@"; do
+    printf 'pub:-:4096:1:%s:1::::::sc::::::23::0:\nfpr:::::::::%s:\n' "${f: -16}" "$f"
+    printf 'sub:-:4096:1:0000000000000000:1::::::e::::::23:\nfpr:::::::::SUB%s:\n' "${f: -16}"
+  done
+}
+_apt_verify_rc() { # fprs
+  if booch_apt_verify_keyring kr "$1" 2>/dev/null; then echo 0; else echo $?; fi
+}
+test_apt_verify_keyring_accepts_pinned_keys() {
+  booch_apt_keyring_records() { _apt_fpr_records "$_APT_FPR_A" "$_APT_FPR_B"; }
+  assert_eq 0 "$(_apt_verify_rc "$_APT_FPR_A $_APT_FPR_B")" "副鍵の fingerprint は照合しない"
+}
+test_apt_verify_keyring_accepts_subset_and_any_separator_or_case() {
+  booch_apt_keyring_records() { _apt_fpr_records "$_APT_FPR_B"; }
+  assert_eq 0 "$(_apt_verify_rc "$(printf '%s\n\t%s' "${_APT_FPR_A,,}" "$_APT_FPR_B")")" \
+    "改行 / タブ区切りと小文字の指定も受け、上流が古い鍵を外しても通す"
+}
+test_apt_verify_keyring_ignores_caller_ifs() {
+  booch_apt_keyring_records() { _apt_fpr_records "$_APT_FPR_A" "$_APT_FPR_B"; }
+  local rc
+  if IFS=$'\n' booch_apt_verify_keyring kr "$_APT_FPR_A $_APT_FPR_B" 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc" "呼び出し側の IFS で照合が変わらない"
+}
+test_apt_verify_keyring_rejects_extra_key() {
+  booch_apt_keyring_records() { _apt_fpr_records "$_APT_FPR_A" AAAABBBBCCCCDDDDEEEEFFFF0000111122223333; }
+  local err; err=$(booch_apt_verify_keyring kr "$_APT_FPR_A" 2>&1) && fail "鍵を足された keyring を通した"
+  assert_contains "$err" "AAAABBBBCCCCDDDDEEEEFFFF0000111122223333"
+}
+test_apt_verify_keyring_rejects_empty_keyring_or_empty_fprs() {
+  booch_apt_keyring_records() { :; }
+  assert_eq 1 "$(_apt_verify_rc "$_APT_FPR_A")" "鍵が 1 本も無ければ落とす"
+  booch_apt_keyring_records() { _apt_fpr_records "$_APT_FPR_A"; }
+  assert_eq 1 "$(_apt_verify_rc " ")" "照合する fingerprint が空なら落とす"
+}
+test_apt_verify_keyring_rejects_unreadable_keyring() {
+  booch_apt_keyring_records() { _apt_fpr_records "$_APT_FPR_A"; return 2; }
+  assert_eq 1 "$(_apt_verify_rc "$_APT_FPR_A")" "gpg が一部を読めなかったら落とす"
+}
+test_apt_verify_keyring_rejects_without_gpg() {
+  booch_apt_keyring_records() { _apt_fpr_records "$_APT_FPR_A"; }
+  local rc
+  if PATH=/nonexistent booch_apt_verify_keyring kr "$_APT_FPR_A" 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc" "gpg が無ければ照合できないので落とす"
+}
+
+# gpg は使い捨ての GNUPGHOME で呼び、終わったら消す（利用者の ~/.gnupg に触らない）。
+test_apt_keyring_records_uses_throwaway_gnupghome() {
+  local d; d=$(mktemp -d); mkdir -p "$d/bin"
+  cat > "$d/bin/gpg" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "${GNUPGHOME:-}" > "$APT_TEST_GNUPGHOME_LOG"
+SH
+  chmod +x "$d/bin/gpg"
+  export APT_TEST_GNUPGHOME_LOG="$d/home.log"
+  PATH="$d/bin:$PATH" booch_apt_keyring_records kr >/dev/null
+  unset APT_TEST_GNUPGHOME_LOG
+  local home; home=$(cat "$d/home.log")
+  rm -rf "$d"
+  [ -n "$home" ] || fail "GNUPGHOME が設定されていない"
+  assert_file_absent "$home" "使い捨ての GNUPGHOME を消す"
+}
+
+# gpg が keyring を読めなかったときは、その終了コードを返す（照合が「読めた」と取り違えない）。
+test_apt_keyring_records_returns_gpg_status() {
+  local d; d=$(mktemp -d); mkdir -p "$d/bin"
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$d/bin/gpg"; chmod +x "$d/bin/gpg"
+  local rc
+  if PATH="$d/bin:$PATH" booch_apt_keyring_records kr >/dev/null; then rc=0; else rc=$?; fi
+  rm -rf "$d"
+  assert_status 2 "$rc"
+}
+test_apt_verify_keyring_rejects_missing_fprs_under_nounset() {
+  booch_apt_keyring_records() { _apt_fpr_records "$_APT_FPR_A"; }
+  local rc
+  if (set -u; booch_apt_verify_keyring kr) 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc" "set -u でも未定義変数で落ちず、空の指定として扱う"
+}
+
+# fprs を渡すと、置いてある keyring も照合し、外れていれば取り直す（鍵がまだ使えても）。
+test_apt_add_repo_refetches_when_existing_keyring_mismatches() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  : > "$d/foo.list"; : > "$d/kr"
+  local key_called=0 rc
+  booch_apt_keyring_usable() { return 0; }
+  booch_apt_verify_keyring() { return 1; }
+  booch_apt_install_key() { key_called=1; }
+  if booch_apt_add_repo foo https://k "$d/kr" raw "deb x" "$_APT_FPR_A" 2>"$d/err"; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_eq 1 "$key_called" "鍵がまだ使えても、照合に落ちれば取り直す"
+  assert_contains "$(cat "$d/err")" "指定の fingerprint と一致しません"
+  rm -rf "$d"
+}
+test_apt_add_repo_skips_when_existing_keyring_matches() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  : > "$d/foo.list"; : > "$d/kr"
+  local called=0
+  booch_apt_keyring_usable() { return 0; }
+  booch_apt_verify_keyring() { return 0; }
+  booch_apt_install_key() { called=1; }
+  booch_apt_add_repo foo https://k "$d/kr" raw "deb x" "$_APT_FPR_A"
+  rm -rf "$d"
+  assert_eq 0 "$called" "照合も期限も問題なければ何もしない"
+}
+
+# install_key は fprs を渡されたときだけ照合し、落ちたら keyring を書かない。
+test_apt_install_key_does_not_place_keyring_on_fingerprint_mismatch() {
+  local d; d=$(mktemp -d)
+  _apt_make_shims "$d" 0
+  local keyring="$d/keys/foo.gpg" rc
+  booch_apt_verify_keyring() { return 1; }
+  if PATH="$d/bin:$PATH" booch_apt_install_key https://x "$keyring" raw "$_APT_FPR_A" 2>/dev/null; then rc=0; else rc=$?; fi
+  assert_status 1 "$rc"
+  assert_file_absent "$keyring"
+  rm -rf "$d"
+}
+test_apt_install_key_places_keyring_when_fingerprint_matches() {
+  local d; d=$(mktemp -d)
+  _apt_make_shims "$d" 0
+  local keyring="$d/keys/foo.gpg" checked=""
+  booch_apt_verify_keyring() { checked="$(cat "$1") $2"; }
+  PATH="$d/bin:$PATH" booch_apt_install_key https://x "$keyring" raw "$_APT_FPR_A"
+  assert_eq "DUMMYKEY $_APT_FPR_A" "$checked" "配置する中身そのものを照合する"
+  assert_eq "DUMMYKEY" "$(cat "$keyring" 2>/dev/null)"
+  rm -rf "$d"
+}
+test_apt_install_key_skips_verify_without_fprs() {
+  local d; d=$(mktemp -d)
+  _apt_make_shims "$d" 0
+  local called=0
+  booch_apt_verify_keyring() { called=1; }
+  PATH="$d/bin:$PATH" booch_apt_install_key https://x "$d/keys/foo.gpg" raw
+  assert_eq 0 "$called" "fprs を省略すれば照合しない（従来どおり）"
+  rm -rf "$d"
+}
+
+# add_repo は新規でも取り直しでも fprs を install_key へ渡す。
+test_apt_add_repo_passes_fprs_to_install_key() {
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  local got=""
+  booch_apt_install_key() { got=$4; }
+  booch_apt_write_list() { :; }
+  booch_apt_add_repo foo https://k "$d/kr" raw "deb x" "$_APT_FPR_A"
+  assert_eq "$_APT_FPR_A" "$got" "新規"
+  : > "$d/foo.list"; : > "$d/kr"; got=""
+  booch_apt_keyring_usable() { return 1; }
+  booch_apt_add_repo foo https://k "$d/kr" raw "deb x" "$_APT_FPR_A" 2>/dev/null
+  assert_eq "$_APT_FPR_A" "$got" "期限切れでの取り直し"
+  rm -rf "$d"
+}
+
+# 取り直した鍵が照合に落ちても、古い keyring を残して警告し 0 を返す（取得失敗と同じ扱い）。
+test_apt_add_repo_keeps_old_keyring_when_refetched_key_mismatches() {
+  local d; d=$(mktemp -d)
+  _apt_make_shims "$d" 0
+  export BOOCH_APT_SOURCES_DIR="$d/sources"
+  mkdir -p "$BOOCH_APT_SOURCES_DIR" "$d/keys"
+  : > "$BOOCH_APT_SOURCES_DIR/foo.list"; printf 'OLDKEY\n' > "$d/keys/foo.gpg"
+  booch_apt_keyring_usable() { return 1; }
+  booch_apt_verify_keyring() { return 1; }
+  local rc err
+  if err=$(PATH="$d/bin:$PATH" booch_apt_add_repo foo https://x "$d/keys/foo.gpg" raw "deb x" "$_APT_FPR_A" 2>&1 >/dev/null); then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_contains "$err" "fingerprint が指定と一致しない"
+  assert_eq "OLDKEY" "$(cat "$d/keys/foo.gpg")" "古い keyring を書き換えない"
+  rm -rf "$d"
+}
+
 # --- booch_apt_ensure（不足分のみ導入） ---
 test_apt_ensure_skips_when_all_installed() {
   booch_apt_pkg_installed() { return 0; }

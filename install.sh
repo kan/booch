@@ -98,6 +98,8 @@ booch_install_gh_key_records() { # keyring
 # keyring の主鍵が 1 本以上あり、すべて _BI_GH_KEY_FPRS に含まれるかを確かめる。
 # 「固定した鍵を 1 本でも含めば通す」にすると、鍵を足された keyring も通ってしまう
 # （apt は keyring の鍵をすべて信用する）ので、1 本でも外れていれば落とす。
+# lib/apt.sh の booch_apt_verify_keyring が同じ規則で照合している（install.sh は自己完結の
+# ため共有できない）。規則を変えるときは両方を直す。
 booch_install_verify_gh_keyring() { # keyring
   local records fprs fpr pinned
   # gpg が一部の鍵を読めずに非 0 で終えたときも通さない（読めなかった鍵を照合できないため）。
