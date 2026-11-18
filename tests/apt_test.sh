@@ -735,15 +735,202 @@ test_apt_sync_tolerates_upgrade_failure() {
   assert_status 0 "$rc"
 }
 
-# --- booch_apt_add_ppa（temp の sources.d / add-apt-repository を seam） ---
-test_apt_add_ppa_skips_when_present() {
+# --- booch_apt_ppa_entries / booch_apt_ppa_state（temp の sources.d） ---
+_ppa_uri=https://ppa.launchpadcontent.net/git-core/ppa/ubuntu
+
+# deb822 形式。リリースアップグレード後の形（Enabled: no、Suites は旧コードネーム）と、
+# Signed-By に鍵を埋め込んだ継続行を含む。
+_ppa_write_sources() { # file enabled suites
+  {
+    [ -n "$2" ] && printf 'Enabled: %s\n' "$2"
+    printf 'Types: deb\nURIs: %s\nSuites: %s\nComponents: main\n' "$_ppa_uri" "$3"
+    printf 'Signed-By: -----BEGIN PGP PUBLIC KEY BLOCK-----\n .\n Suites: %s\n -----END PGP PUBLIC KEY BLOCK-----\n' "$3"
+  } > "$1"
+}
+
+test_apt_ppa_entries_deb822_states() {
   BOOCH_APT_SOURCES_DIR=$(mktemp -d)
-  echo "deb http://ppa.example/git-core/ppa ..." > "$BOOCH_APT_SOURCES_DIR/git.list"
+  local d=$BOOCH_APT_SOURCES_DIR
+  _ppa_write_sources "$d/a.sources" "" resolute
+  _ppa_write_sources "$d/b.sources" no resolute
+  _ppa_write_sources "$d/c.sources" "" noble
+  local out; out=$(booch_apt_ppa_entries resolute)
+  rm -rf "$d"
+  assert_contains "$out" "git-core/ppa	ok	$d/a.sources"
+  assert_contains "$out" "git-core/ppa	disabled	$d/b.sources"
+  assert_contains "$out" "git-core/ppa	stale	$d/c.sources"   # 継続行の Suites に釣られない
+}
+
+test_apt_ppa_entries_list_states() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  local d=$BOOCH_APT_SOURCES_DIR
+  printf 'deb [arch=amd64 signed-by=/k.gpg] %s resolute main\n# deb-src %s resolute main\n' \
+    "$_ppa_uri" "$_ppa_uri" > "$d/a.list"
+  printf '# deb %s noble main # disabled on upgrade to resolute\n' "$_ppa_uri" > "$d/b.list"
+  printf 'deb %s noble main\n' "$_ppa_uri" > "$d/c.list.disabled"
+  printf '# deb %s resolute main\n' "$_ppa_uri" > "$d/e.list"
+  printf 'deb https://example/x stable main\n' > "$d/other.list"   # PPA でない行は出さない
+  local out; out=$(booch_apt_ppa_entries resolute)
+  rm -rf "$d"
+  assert_eq "4" "$(grep -c . <<<"$out")"
+  assert_contains "$out" "git-core/ppa	ok	$d/a.list"
+  assert_contains "$out" "git-core/ppa	stale	$d/b.list"        # 旧コードネームは無効でも stale
+  assert_contains "$out" "git-core/ppa	stale	$d/c.list.disabled"
+  assert_contains "$out" "git-core/ppa	disabled	$d/e.list"     # 今のコードネームで無効
+}
+
+# CRLF や行末の空白があっても Enabled: no を読み落とさない。
+test_apt_ppa_entries_trims_trailing_space_and_cr() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  printf 'Enabled: no \r\nTypes: deb\r\nURIs: %s\r\nSuites: resolute\r\n' "$_ppa_uri" \
+    > "$BOOCH_APT_SOURCES_DIR/a.sources"
+  local out; out=$(booch_apt_ppa_entries resolute)
+  rm -rf "$BOOCH_APT_SOURCES_DIR"
+  assert_contains "$out" "	disabled	"
+}
+
+# deb-src だけの stanza は数えない。
+test_apt_ppa_entries_skips_deb_src_only() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  printf 'Types: deb-src\nURIs: %s\nSuites: resolute\n' "$_ppa_uri" > "$BOOCH_APT_SOURCES_DIR/a.sources"
+  local out; out=$(booch_apt_ppa_entries resolute)
+  rm -rf "$BOOCH_APT_SOURCES_DIR"
+  assert_eq "" "$out"
+}
+
+# コードネームは引数 → os-release の UBUNTU_CODENAME → BOOCH_OS_CODENAME →
+# os-release の VERSION_CODENAME の順。
+test_apt_ppa_entries_codename_from_os_release() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  local d=$BOOCH_APT_SOURCES_DIR
+  _ppa_write_sources "$d/a.sources" "" noble
+  BOOCH_OS_CODENAME=""
+  BOOCH_APT_OS_RELEASE="$d/os-release"
+  printf 'VERSION_CODENAME=resolute\n' > "$BOOCH_APT_OS_RELEASE"
+  local out; out=$(booch_apt_ppa_entries)
+  rm -rf "$d"
+  assert_contains "$out" "	stale	"
+}
+
+# 派生ディストリ（VERSION_CODENAME が独自の名前）でも、PPA は Ubuntu のコードネームで見る。
+test_apt_ppa_entries_prefers_ubuntu_codename() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  local d=$BOOCH_APT_SOURCES_DIR
+  _ppa_write_sources "$d/a.sources" "" noble
+  BOOCH_OS_CODENAME=zara
+  BOOCH_APT_OS_RELEASE="$d/os-release"
+  printf 'VERSION_CODENAME=zara\nUBUNTU_CODENAME=noble\n' > "$BOOCH_APT_OS_RELEASE"
+  local out; out=$(booch_apt_ppa_entries)
+  rm -rf "$d"
+  assert_contains "$out" "	ok	"
+}
+
+# 有効な行が 1 件あれば ok。次に意図した無効（disabled）、次に名残（stale）。
+test_apt_ppa_state_fold_order() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  local d=$BOOCH_APT_SOURCES_DIR
+  _ppa_write_sources "$d/a.sources" no noble
+  assert_eq "stale" "$(booch_apt_ppa_state git-core/ppa resolute)"
+  _ppa_write_sources "$d/b.sources" no resolute
+  assert_eq "disabled" "$(booch_apt_ppa_state git-core/ppa resolute)"
+  _ppa_write_sources "$d/c.sources" "" resolute
+  assert_eq "ok" "$(booch_apt_ppa_state git-core/ppa resolute)"
+  assert_eq "missing" "$(booch_apt_ppa_state other/ppa resolute)"
+  rm -rf "$d"
+}
+
+# --- booch_apt_add_ppa（temp の sources.d / add-apt-repository を seam） ---
+# os-release はホストのものを読ませない（コードネームは BOOCH_OS_CODENAME で与える）。
+_ppa_setup() {
+  BOOCH_APT_SOURCES_DIR=$(mktemp -d)
+  BOOCH_APT_OS_RELEASE=/nonexistent
+  BOOCH_OS_CODENAME=resolute
+  booch_apt_dist_exists() { return 0; }
+}
+
+test_apt_add_ppa_skips_when_present() {
+  _ppa_setup
+  _ppa_write_sources "$BOOCH_APT_SOURCES_DIR/git-core-ubuntu-ppa-resolute.sources" "" resolute
   local added=0
   sudo() { added=1; }
   booch_apt_add_ppa ppa:git-core/ppa >/dev/null 2>&1
   assert_eq "0" "$added" "既存なら add-apt-repository を呼ばない"
   rm -rf "$BOOCH_APT_SOURCES_DIR"
+}
+
+# 今のコードネームのまま無効なものは、利用者が意図して無効にしたものとして触らない。
+test_apt_add_ppa_keeps_deliberately_disabled() {
+  _ppa_setup
+  _ppa_write_sources "$BOOCH_APT_SOURCES_DIR/git-core-ubuntu-ppa-resolute.sources" no resolute
+  local called=0
+  sudo() { called=1; }
+  booch_apt_add_ppa ppa:git-core/ppa >/dev/null 2>&1
+  assert_eq "0" "$called"
+  rm -rf "$BOOCH_APT_SOURCES_DIR"
+}
+
+# リリースアップグレードで無効になった PPA は、add-apt-repository が作ったファイルを退避して
+# 追加し直す（文字列があるだけで導入済みと判定しない）。
+test_apt_add_ppa_readds_after_release_upgrade() {
+  _ppa_setup
+  local d=$BOOCH_APT_SOURCES_DIR got=""
+  _ppa_write_sources "$d/git-core-ubuntu-ppa-focal.sources" no noble
+  sudo() {
+    if [ "$1" = add-apt-repository ]; then
+      [ -e "$d/git-core-ubuntu-ppa-focal.sources" ] && return 1   # 退避してから呼ぶこと
+      got="$*"; _ppa_write_sources "$d/git-core-ubuntu-ppa-resolute.sources" "" resolute
+    else "$@"; fi
+  }
+  booch_apt_add_ppa ppa:git-core/ppa >/dev/null 2>&1
+  assert_contains "$got" "ppa:git-core/ppa"
+  assert_file_absent "$d/git-core-ubuntu-ppa-focal.sources" "名残のファイルは消す"
+  assert_file_absent "$d/git-core-ubuntu-ppa-focal.sources.booch-bak" "退避も消す"
+  assert_eq "ok" "$(booch_apt_ppa_state git-core/ppa)"
+  rm -rf "$d"
+}
+
+# 新しいコードネーム向けがまだ公開されていなければ、今の source を残して追加を試みない。
+test_apt_add_ppa_keeps_stale_until_published() {
+  _ppa_setup
+  booch_apt_dist_exists() { return 1; }
+  local d=$BOOCH_APT_SOURCES_DIR called=0
+  _ppa_write_sources "$d/git-core-ubuntu-ppa-noble.sources" "" noble
+  sudo() { called=1; }
+  local rc; if booch_apt_add_ppa ppa:git-core/ppa >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  assert_eq "0" "$called"
+  [ -f "$d/git-core-ubuntu-ppa-noble.sources" ] || fail "動いている source を動かした"
+  rm -rf "$d"
+}
+
+# 追加に失敗したら退避したファイルを戻す。手で書いた名前のファイルは触らない。
+test_apt_add_ppa_restores_on_failure() {
+  _ppa_setup
+  local d=$BOOCH_APT_SOURCES_DIR
+  _ppa_write_sources "$d/git-core-ubuntu-ppa-noble.sources" "" noble
+  printf 'deb %s noble main\n' "$_ppa_uri" > "$d/mine.list"
+  sudo() { if [ "$1" = add-apt-repository ]; then return 1; else "$@"; fi; }
+  local err rc
+  if err=$(booch_apt_add_ppa ppa:git-core/ppa "" true 2>&1); then rc=0; else rc=$?; fi
+  assert_status 0 "$rc"
+  [ -f "$d/git-core-ubuntu-ppa-noble.sources" ] || fail "退避したファイルを戻していない"
+  assert_file_absent "$d/git-core-ubuntu-ppa-noble.sources.booch-bak"
+  [ -f "$d/mine.list" ] || fail "手で書いたファイルを動かした"
+  assert_contains "$err" "mine.list"
+  rm -rf "$d"
+}
+
+# PPA 名の記号（+ など）を _ にしたファイル名も、add-apt-repository が作ったものとして扱う。
+test_apt_add_ppa_matches_sanitized_file_name() {
+  _ppa_setup
+  local d=$BOOCH_APT_SOURCES_DIR err
+  printf 'Types: deb\nURIs: https://ppa.launchpadcontent.net/own/foo+bar/ubuntu\nSuites: noble\n' \
+    > "$d/own-ubuntu-foo_bar-noble.sources"
+  sudo() { if [ "$1" = add-apt-repository ]; then return 0; else "$@"; fi; }
+  err=$(booch_apt_add_ppa ppa:own/foo+bar 2>&1 >/dev/null)
+  assert_file_absent "$d/own-ubuntu-foo_bar-noble.sources"
+  assert_not_contains "$err" "手で直して"
+  rm -rf "$d"
 }
 
 test_apt_add_ppa_adds_when_absent() {

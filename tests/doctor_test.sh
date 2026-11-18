@@ -557,4 +557,61 @@ test_doctor_apt_keyrings_lists_partial_unreadable() {
   assert_contains "$out" "bar"
 }
 
+# --- booch_doctor_apt_ppas（PPA の有効性。lib/apt.sh の判定に乗る） ---
+# 各テストはサブシェルで動くので、lib/apt.sh の source もテストの中に閉じる。
+_doctor_ppa_sources() { # file owner/name enabled suites
+  {
+    [ -n "$3" ] && printf 'Enabled: %s\n' "$3"
+    printf 'Types: deb\nURIs: https://ppa.launchpadcontent.net/%s/ubuntu\nSuites: %s\n' "$2" "$4"
+  } > "$1"
+}
+
+test_doctor_apt_ppas_warns_on_stale() {
+  # shellcheck source=lib/apt.sh
+  source "$BOOCH_ROOT/lib/apt.sh"
+  booch_doctor_init
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d" BOOCH_APT_OS_RELEASE=/nonexistent BOOCH_OS_CODENAME=resolute
+  _doctor_ppa_sources "$d/a.sources" git-core/ppa no noble     # アップグレードで無効にされた形
+  _doctor_ppa_sources "$d/b.sources" foo/bar "" noble
+  _doctor_ppa_sources "$d/c.sources" baz/qux "" resolute
+  local out; out=$(booch_doctor_apt_ppas)
+  booch_doctor_apt_ppas >/dev/null
+  rm -rf "$d"
+  assert_contains "$out" "[WARN]"
+  assert_contains "$out" "git-core/ppa(旧コードネーム)"
+  assert_contains "$out" "foo/bar(旧コードネーム)"
+  assert_not_contains "$out" "baz/qux"
+  assert_eq "1" "$BOOCH_DOCTOR_WARN"
+}
+
+# 名残があっても有効な行があれば ok。今のコードネームのまま無効なものは ok 行に注記する。
+test_doctor_apt_ppas_ok_when_enabled_or_deliberately_disabled() {
+  # shellcheck source=lib/apt.sh
+  source "$BOOCH_ROOT/lib/apt.sh"
+  booch_doctor_init
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d" BOOCH_APT_OS_RELEASE=/nonexistent BOOCH_OS_CODENAME=resolute
+  _doctor_ppa_sources "$d/old.sources" git-core/ppa no noble
+  _doctor_ppa_sources "$d/new.sources" git-core/ppa "" resolute
+  _doctor_ppa_sources "$d/off.sources" foo/bar no resolute
+  local out; out=$(booch_doctor_apt_ppas)
+  booch_doctor_apt_ppas >/dev/null
+  rm -rf "$d"
+  assert_contains "$out" "[OK]"
+  assert_contains "$out" "foo/bar(無効) git-core/ppa"
+  assert_eq "0" "$BOOCH_DOCTOR_WARN"
+}
+
+test_doctor_apt_ppas_skips_without_ppa() {
+  # shellcheck source=lib/apt.sh
+  source "$BOOCH_ROOT/lib/apt.sh"
+  booch_doctor_init
+  local d; d=$(mktemp -d)
+  export BOOCH_APT_SOURCES_DIR="$d"
+  local out; out=$(booch_doctor_apt_ppas)
+  rm -rf "$d"
+  assert_contains "$out" "[SKIP]"
+}
+
 run_tests

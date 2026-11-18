@@ -5,6 +5,23 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Added
+
+- `lib/apt.sh` に `booch_apt_ppa_entries` / `booch_apt_ppa_state` を足した。sources.list.d の PPA の行を、1 行形式と
+  deb822 形式の両方から読み、`ok`（有効で今のコードネーム）/ `stale`（旧コードネームのまま。リリースアップグレードの
+  名残）/ `disabled`（今のコードネームのまま無効。意図して無効にしたものとみなす）/ `missing` を判定する。
+  コードネームは os-release の `UBUNTU_CODENAME` を優先する（派生ディストリでも PPA は Ubuntu の名前で見る）
+- `lib/doctor.sh` に `booch_doctor_apt_ppas` を足した。sources.list.d の PPA のうち、旧コードネームのまま残った
+  ものを warn で挙げる。リリースアップグレードが PPA を無効にすると、パッケージは黙ってディストリ版へ戻る
+
+### Fixed
+
+- `booch_apt_add_ppa` が、リリースアップグレードで無効になった PPA を導入済みと判定し、追加し直さなかった。
+  `ppa:<owner>/<name>` の形なら `booch_apt_ppa_state` で判定し、`stale` のときは、PPA が今のコードネーム向けを
+  公開していれば、add-apt-repository が作った名前のファイルを sources.list.d の中で `*.booch-bak` へ退避して
+  追加し直す（失敗したら戻す）。公開前なら今の source を残して警告だけ出す。`disabled` は触らない。それ以外の
+  形の引数は従来どおり文字列の有無で判定する
+
 ## [1.20.0] - 2026-11-07
 
 ### Added
