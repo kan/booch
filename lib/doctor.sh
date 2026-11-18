@@ -394,3 +394,34 @@ booch_doctor_apt_keyrings() {
     booch_doctor_row "  keys unreadable" warn "${unread[*]}（署名鍵を持たない keyring?）"
   fi
 }
+
+# PPA の source が有効で、今のコードネームを向いているかを診断する（lib/apt.sh を source
+# 済みであること）。リリースアップグレードは PPA を無効にして Suites を旧コードネームの
+# まま残すので、パッケージは黙ってディストリ版へ戻る。sources.list.d の PPA を全部見るので、
+# PPA を足しても利用側の追記は要らない。状態の畳み方は booch_apt_ppa_state と同じ
+# （booch_apt_add_ppa と同じ判定）。warn にするのは旧コードネームの名残（stale）だけで、
+# 今のコードネームのまま無効なもの（disabled）は意図したものとみなし、ok 行に注記して挙げる。
+booch_doctor_apt_ppas() {
+  local label="apt PPAs" entries id state
+  local -a ids=() good=() bad=()
+  entries=$(booch_apt_ppa_entries)
+  mapfile -t ids < <(printf '%s' "$entries" | cut -f1 | sort -u | grep .)
+  if [ "${#ids[@]}" -eq 0 ]; then
+    booch_doctor_row "$label" skip "PPA なし"
+    return 0
+  fi
+  for id in "${ids[@]}"; do
+    state=$(awk -F'\t' -v id="$id" '$1 == id { print $2 }' <<<"$entries" | _booch_apt_ppa_fold)
+    case $state in
+      ok) good+=("$id") ;;
+      disabled) good+=("$id(無効)") ;;
+      *) bad+=("$id(旧コードネーム)") ;;
+    esac
+  done
+  if [ "${#bad[@]}" -gt 0 ]; then
+    booch_doctor_row "$label" warn \
+      "${bad[*]}（setup の再実行か sudo add-apt-repository ppa:<owner>/<name> で戻す）"
+  else
+    booch_doctor_row "$label" ok "${good[*]}"
+  fi
+}

@@ -48,7 +48,7 @@ booch/
 │   ├── color.sh                  # 色（ANSI）の共通定義（tty/NO_COLOR gate）
 │   ├── arch.sh                   # アーキテクチャ名の解決（dpkg 系 / rust 系）
 │   ├── os.sh                     # OS 検出（os-release → BOOCH_OS_*）
-│   ├── apt.sh                    # APT リポジトリ追加（鍵の fingerprint 照合つき）・コードネーム解決
+│   ├── apt.sh                    # APT リポジトリ / PPA の追加（鍵の fingerprint 照合つき）・PPA の有効性判定・コードネーム解決
 │   ├── doctor.sh                 # 診断レポートのフレーム（行描画・バージョン比較・集計）
 │   ├── github.sh                 # GitHub Releases（最新タグ取得・資産ダウンロード）
 │   ├── verify.sh                 # 取得物の SHA256 検証（upstream のチェックサムと照合）

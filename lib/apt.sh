@@ -363,24 +363,224 @@ booch_apt_sync() { # pkg...
   booch_apt_warn_autoremove || true
 }
 
+# PPA（Launchpad の ppa:<owner>/<name>）の source の状態を読む。リリースアップグレードは
+# サードパーティの source を無効にし（deb822 は Enabled: no、1 行形式はコメントアウトか
+# *.disabled への改名）、Suites も旧コードネームのまま残す。PPA の文字列が sources.list.d に
+# あるだけでは有効とはいえないので、行ごとに状態を見る。
+#
+# booch_apt_ppa_entries は PPA の行を 1 件ずつ "<owner>/<name>\t<state>\t<file>" で出す。
+#   ok        有効で、Suites に今のコードネームがある
+#   stale     Suites に今のコードネームが無い（有効か無効かを問わない。アップグレードの名残）
+#   disabled  Suites は今のコードネームだが無効（Enabled: no / コメントアウト / *.disabled の
+#             ファイル）。利用者が意図して無効にしたものとみなす
+# 読むのは *.list / *.sources と、その *.disabled。対象は deb の行だけ（deb-src は見ない）。
+# コードネームが決まらなければ stale を判定しない（有効なら ok、無効なら disabled）。
+#
+# コードネームは引数 → os-release の UBUNTU_CODENAME → BOOCH_OS_CODENAME（lib/os.sh）→
+# os-release の VERSION_CODENAME の順で決める。PPA の Suites は Ubuntu のコードネームなので、
+# 派生ディストリ（VERSION_CODENAME が独自の名前）でも UBUNTU_CODENAME を優先する。lib/os.sh の
+# booch_detect_os は VERSION_CODENAME を優先し、UBUNTU_CODENAME を別に出さないので使わない。
+# os-release の場所は BOOCH_APT_OS_RELEASE（既定 /etc/os-release）で差し替えられる。
+_booch_apt_os_release_value() { # key
+  local f=${BOOCH_APT_OS_RELEASE:-/etc/os-release}
+  [ -r "$f" ] || return 0
+  (
+    # shellcheck disable=SC1090  # os-release は実行時に決まるパス（fixture 含む）
+    . "$f" 2>/dev/null
+    printf '%s' "${!1:-}"
+  )
+}
+
+_booch_apt_codename() { # [codename]
+  local cn=${1:-}
+  [ -n "$cn" ] || cn=$(_booch_apt_os_release_value UBUNTU_CODENAME)
+  [ -n "$cn" ] || cn=${BOOCH_OS_CODENAME:-}
+  [ -n "$cn" ] || cn=$(_booch_apt_os_release_value VERSION_CODENAME)
+  printf '%s' "$cn"
+}
+
+# URI から "<owner>/<name>" を取り出す（PPA の URI でなければ非 0）。
+_booch_apt_ppa_id() { # uri
+  [[ $1 =~ launchpad(content)?\.net/([^/]+)/([^/]+)/ubuntu ]] || return 1
+  printf '%s/%s' "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+}
+
+# 1 つの source（URI は複数可）の状態を決めて出す。
+_booch_apt_ppa_emit() { # file disabled codename suites uri...
+  local file=$1 disabled=$2 cn=$3 id state s uri
+  local -a suites
+  read -ra suites <<<"$4"
+  shift 4
+  for uri in "$@"; do
+    id=$(_booch_apt_ppa_id "$uri") || continue
+    state=current
+    if [ -n "$cn" ]; then
+      state=stale
+      for s in "${suites[@]}"; do [ "$s" = "$cn" ] && state=current; done
+    fi
+    if [ "$state" = current ]; then
+      if [ "$disabled" = 1 ]; then state=disabled; else state=ok; fi
+    fi
+    printf '%s\t%s\t%s\n' "$id" "$state" "$file"
+  done
+}
+
+# 1 行形式（deb [opts] uri suite comp...）。コメントアウトされた deb 行は無効として数える。
+_booch_apt_ppa_scan_list() { # file disabled codename
+  local file=$1 fdis=$2 cn=$3 line d _type uri suite
+  local -a lines
+  mapfile -t lines <"$file"
+  for line in "${lines[@]}"; do
+    d=$fdis
+    line=${line#"${line%%[![:space:]]*}"}
+    if [ "${line#\#}" != "$line" ]; then
+      d=1
+      line=${line#"${line%%[!#[:space:]]*}"}
+    fi
+    case $line in 'deb '* | 'deb	'*) ;; *) continue ;; esac
+    if [[ $line == *'['*']'* ]]; then line="${line%%\[*}${line#*\]}"; fi
+    read -r _type uri suite _ <<<"$line"
+    _booch_apt_ppa_emit "$file" "$d" "$cn" "$suite" "$uri"
+  done
+}
+
+# deb822 の 1 stanza を出す。
+_booch_apt_ppa_stanza() { # file disabled codename enabled types suites uris
+  local file=$1 d=$2 cn=$3 enabled=$4 t has_deb=0
+  local -a types uris
+  read -ra types <<<"$5"
+  read -ra uris <<<"$7"
+  [ "${#uris[@]}" -gt 0 ] || return 0
+  for t in "${types[@]}"; do [ "$t" = deb ] && has_deb=1; done
+  [ "$has_deb" = 1 ] || return 0
+  case ${enabled,,} in no | false | off | 0) d=1 ;; esac
+  _booch_apt_ppa_emit "$file" "$d" "$cn" "$6" "${uris[@]}"
+}
+
+# deb822 形式（*.sources）。空行で stanza を区切る。空白で始まる行は前の field の続き
+# （Signed-By に埋め込んだ鍵など）なので読み飛ばす。
+_booch_apt_ppa_scan_sources() { # file disabled codename
+  local file=$1 fdis=$2 cn=$3 line key val
+  local s_enabled=yes s_types="" s_suites="" s_uris=""
+  local -a lines
+  mapfile -t lines <"$file"
+  for line in "${lines[@]}"; do
+    if [ -z "${line//[[:space:]]/}" ]; then
+      _booch_apt_ppa_stanza "$file" "$fdis" "$cn" "$s_enabled" "$s_types" "$s_suites" "$s_uris"
+      s_enabled=yes s_types="" s_suites="" s_uris=""
+      continue
+    fi
+    case $line in '#'* | [[:space:]]*) continue ;; esac
+    key=${line%%:*}
+    val=${line#*:}
+    val=${val#"${val%%[![:space:]]*}"}
+    val=${val%"${val##*[![:space:]]}"}   # 行末の空白と CR（CRLF のファイル）も落とす
+    case ${key,,} in
+      enabled) s_enabled=$val ;;
+      types) s_types=$val ;;
+      suites) s_suites=$val ;;
+      uris) s_uris=$val ;;
+    esac
+  done
+  _booch_apt_ppa_stanza "$file" "$fdis" "$cn" "$s_enabled" "$s_types" "$s_suites" "$s_uris"
+}
+
+booch_apt_ppa_entries() { # [codename]
+  local cn f d
+  cn=$(_booch_apt_codename "${1:-}")
+  for f in "$BOOCH_APT_SOURCES_DIR"/*.list "$BOOCH_APT_SOURCES_DIR"/*.sources \
+    "$BOOCH_APT_SOURCES_DIR"/*.list.disabled "$BOOCH_APT_SOURCES_DIR"/*.sources.disabled; do
+    [ -f "$f" ] || continue
+    case $f in *.disabled) d=1 ;; *) d=0 ;; esac
+    case ${f%.disabled} in
+      *.sources) _booch_apt_ppa_scan_sources "$f" "$d" "$cn" ;;
+      *) _booch_apt_ppa_scan_list "$f" "$d" "$cn" ;;
+    esac
+  done
+}
+
+# 状態の列（1 行 1 件）を 1 つに畳む。ok が 1 件でもあれば ok（アップグレードの名残が
+# 残っていても、作り直した有効な行があればよい）、次に disabled（意図して無効にした行を、
+# 名残の行より優先する）、次に stale、何も無ければ missing。
+_booch_apt_ppa_fold() {
+  local states
+  states=$(cat)
+  if grep -qx ok <<<"$states"; then echo ok
+  elif grep -qx disabled <<<"$states"; then echo disabled
+  elif grep -qx stale <<<"$states"; then echo stale
+  else echo missing
+  fi
+}
+
+# PPA 1 つの状態を出す: ok / disabled / stale / missing（畳み方は _booch_apt_ppa_fold）。
+booch_apt_ppa_state() { # owner/name [codename]
+  booch_apt_ppa_entries "${2:-}" | awk -F'\t' -v id="$1" '$1 == id { print $2 }' \
+    | _booch_apt_ppa_fold
+}
+
 # add-apt-repository 系の PPA を追加する（鍵 + deb の keyring パターンの booch_apt_add_repo
-# とは別系統）。grep_pattern（既定: "ppa:" を除いた owner/repo）が sources.list.d に既にあれば
-# スキップ。allow_fail を真にすると追加失敗を警告だけして続行する（新リリース直後に当該
+# とは別系統）。ppa:<owner>/<name> の形なら booch_apt_ppa_state で判定する。
+#   ok / disabled  何もしない（disabled は利用者が意図して無効にしたものとして触らない）
+#   missing        追加する
+#   stale          リリースアップグレードの名残。PPA が今のコードネーム向けを公開していれば
+#                  （booch_apt_dist_exists）、add-apt-repository が作った名前
+#                  （<owner>-ubuntu-<name>-*）のファイルを sources.list.d の中で *.booch-bak へ
+#                  改名して退避し、追加し直す。成功したら退避を消し、失敗したら戻す。まだ公開
+#                  していなければ、今の source を残して警告だけ出す（動いている旧コードネームの
+#                  source を壊さず、公開を待つ間に毎回追加を試みない）。それ以外の名前の
+#                  ファイルにある行は手で書いたものとみなして触らず、警告だけ出す
+# ppa:<owner>/<name> 以外の形では従来どおり、grep_pattern（既定: "ppa:" を除いた文字列）が
+# sources.list.d にあればスキップする。
+# allow_fail を真にすると追加失敗を警告だけして続行する（新リリース直後に当該
 # コードネーム向けが未公開なケース）。どの PPA を使うか・失敗許容かは利用側が決める。
 booch_apt_add_ppa() { # ppa [grep_pattern] [allow_fail]
-  local ppa=$1 pat=${2:-${1#ppa:}} allow_fail=${3:-}
-  # -F: パターンは固定文字列（owner/repo 等）として扱う（メタ文字を含む PPA 名で誤判定しない）。
-  grep -rqF "$pat" "$BOOCH_APT_SOURCES_DIR/" 2>/dev/null && return 0
+  local ppa=$1 pat=${2:-${1#ppa:}} allow_fail=${3:-} id state cn f own own2
+  local -a files=() moved=()
+  case $ppa in
+    ppa:?*/?*)
+      id=${ppa#ppa:}
+      state=$(booch_apt_ppa_state "$id")
+      case $state in ok | disabled) return 0 ;; esac
+      if [ "$state" = stale ]; then
+        cn=$(_booch_apt_codename)
+        if ! booch_apt_dist_exists "https://ppa.launchpadcontent.net/$id/ubuntu" "$cn"; then
+          printf '%s[WARN]%s PPA %s は %s 向けをまだ公開していないので、今の source のまま残します\n' \
+            "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$ppa" "$cn" >&2
+          return 0
+        fi
+        printf 'PPA %s は旧コードネームのままなので、%s 向けに追加し直します\n' "$ppa" "$cn"
+        mapfile -t files < <(booch_apt_ppa_entries \
+          | awk -F'\t' -v id="$id" '$1 == id { print $3 }' | sort -u)
+        # add-apt-repository はファイル名の記号を _ へ置き換える。置き換える範囲が版で
+        # 違っても拾えるよう、"." だけの形と英数字以外すべての形の両方と比べる。
+        own="${id%%/*}-ubuntu-${id#*/}-"
+        own2=${own//[^A-Za-z0-9_-]/_}
+        own=${own//./_}
+        for f in "${files[@]}"; do
+          case ${f##*/} in
+            "$own"* | "$own2"*) sudo mv -- "$f" "$f.booch-bak" && moved+=("$f") ;;
+            *) printf '%s[WARN]%s %s にも %s の行があります（手で直してください）\n' \
+                 "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$f" "$ppa" >&2 ;;
+          esac
+        done
+      fi ;;
+    *)
+      # -F: パターンは固定文字列（owner/repo 等）として扱う（メタ文字を含む PPA 名で誤判定しない）。
+      grep -rqF "$pat" "$BOOCH_APT_SOURCES_DIR/" 2>/dev/null && return 0 ;;
+  esac
   echo "Adding PPA: $ppa"
-  if ! sudo add-apt-repository -y "$ppa"; then
-    case "$allow_fail" in
-      true | yes | 1)
-        printf '%s[WARN]%s PPA %s を追加できませんでした（続行します）\n' \
-          "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$ppa" >&2
-        return 0 ;;
-      *) return 1 ;;
-    esac
+  if sudo add-apt-repository -y "$ppa"; then
+    for f in "${moved[@]}"; do sudo rm -f -- "$f.booch-bak"; done
+    return 0
   fi
+  for f in "${moved[@]}"; do sudo mv -- "$f.booch-bak" "$f"; done
+  case "$allow_fail" in
+    true | yes | 1)
+      printf '%s[WARN]%s PPA %s を追加できませんでした（続行します）\n' \
+        "$_BOOCH_COLOR_YELLOW" "$_BOOCH_COLOR_RESET" "$ppa" >&2
+      return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # preferences.d/<name> に origin pin を書く（ディストリ版が指定 origin の版を上書きしない
