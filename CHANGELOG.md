@@ -5,6 +5,12 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Fixed
+
+- `booch_uv_tool_ensure` が、導入済みのツールを upgrade するときに python の指定を渡していなかった。指定を
+  上げても環境は古い python のまま残り、新しい python を要求する版へ上がらなかった。`uv tool upgrade --python`
+  で渡すようにした。環境の python が指定を満たしていれば作り直さない
+
 ## [1.21.0] - 2026-11-18
 
 ### Added

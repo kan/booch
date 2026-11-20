@@ -9,7 +9,7 @@
 # 使い方:
 #   source "$BOOCH_ROOT/lib/uv.sh"
 #   booch_uv_ensure
-#   booch_uv_tool_ensure ansible-core 3.12      # 未導入なら python 3.12 で導入、あれば upgrade
+#   booch_uv_tool_ensure ansible-core 3.12      # 未導入なら python 3.12 で導入、あれば python 3.12 で upgrade
 #
 # 依存: curl（bootstrap 用）, uv（導入後）。
 #
@@ -19,7 +19,7 @@
 #   booch_uv_bootstrap_install    astral のスクリプトで uv を導入
 #   booch_uv_tool_list            uv tool list の出力
 #   booch_uv_tool_install <args>  uv tool install <args>
-#   booch_uv_tool_upgrade <tool>  uv tool upgrade <tool>
+#   booch_uv_tool_upgrade <args>  uv tool upgrade <args>
 
 booch_uv_present() { command -v uv >/dev/null 2>&1; }
 
@@ -63,13 +63,21 @@ booch_uv_tool_installed() { # tool
 }
 
 # uv tool を冪等に用意する。導入済みなら upgrade、未導入なら install。python 指定可。
+# python の指定は upgrade にも渡す。渡さないと、指定を上げても導入済みの環境は古い
+# python のまま残り、新しい python を要求する版へ上がらない。uv tool upgrade --python は
+# 環境の python が指定を満たさないときだけ作り直し、満たしていれば何もしない（同じ指定で
+# 続けて実行しても作り直さないことを確認済み）ので、冪等性は保たれる。
 # 第 3 引数に "force" を渡すと install 時に --force を付ける（pipx 等で入れた他管理の
 # 実行ファイルが ~/.local/bin に残っていると uv tool install が "Executables already
 # exist" で失敗するため、移行用途で上書き導入したいとき）。
 booch_uv_tool_ensure() { # tool [python] [force]
   local tool=$1 py=${2:-} force=${3:-}
   if booch_uv_tool_installed "$tool"; then
-    booch_uv_tool_upgrade "$tool"
+    if [ -n "$py" ]; then
+      booch_uv_tool_upgrade --python "$py" "$tool"
+    else
+      booch_uv_tool_upgrade "$tool"
+    fi
     return
   fi
   local args=()
