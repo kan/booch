@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-11-20
+
 ### Fixed
 
 - `booch_uv_tool_ensure` が、導入済みのツールを upgrade するときに python の指定を渡していなかった。指定を
@@ -734,6 +736,7 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
+[1.21.1]: https://github.com/kan/booch/releases/tag/v1.21.1
 [1.21.0]: https://github.com/kan/booch/releases/tag/v1.21.0
 [1.20.0]: https://github.com/kan/booch/releases/tag/v1.20.0
 [1.19.0]: https://github.com/kan/booch/compare/v1.18.2...v1.19.0
