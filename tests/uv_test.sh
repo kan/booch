@@ -89,8 +89,16 @@ test_uv_tool_ensure_upgrades_when_present() {
   booch_uv_tool_upgrade() { up_args="$*"; }
   booch_uv_tool_install() { inst_called=1; }
   booch_uv_tool_ensure ansible-core 3.12
-  assert_eq "ansible-core" "$up_args"
+  assert_eq "--python 3.12 ansible-core" "$up_args" "python 指定は upgrade にも渡す"
   assert_eq "0" "$inst_called" "導入済みなら install しない"
+}
+test_uv_tool_ensure_upgrades_without_python() {
+  booch_uv_tool_installed() { return 0; }
+  local up_args="__unset__"
+  booch_uv_tool_upgrade() { up_args="$*"; }
+  booch_uv_tool_install() { :; }
+  booch_uv_tool_ensure ruff
+  assert_eq "ruff" "$up_args"
 }
 test_uv_tool_ensure_installs_with_python_when_absent() {
   booch_uv_tool_installed() { return 1; }
