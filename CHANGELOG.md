@@ -5,6 +5,12 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+### Fixed
+
+- `booch_claude_plugin_list` が、Claude Code 本体に同梱の組込みプラグイン（`<name>@builtin`）も導入済みとして
+  返していた。`plugin list --json` は組込みも `scope: "user"` で返し、`plugin uninstall` は "not installed" で
+  失敗するので、autoremove が消せない候補を毎回出していた。id の接尾辞で除くようにした
+
 ## [1.21.1] - 2026-11-20
 
 ### Fixed
