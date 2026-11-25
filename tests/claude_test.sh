@@ -387,6 +387,24 @@ test_claude_plugin_list_excludes_session_scope() {
   assert_eq 'acme-tools@acme
 codex@openai-codex' "$(booch_claude_plugin_list)"
 }
+# 本体同梱の組込みプラグイン（@builtin）は `--json` で scope が user でも除く（uninstall できないため）。
+test_claude_plugin_list_excludes_builtin() {
+  booch_claude_run() {
+    case "$*" in "plugin list --json")
+      printf '[{"id":"acme-tools@acme","scope":"user"},{"id":"cc-plugin-privacy@builtin","scope":"user"}]\n' ;; esac
+  }
+  assert_eq 'acme-tools@acme' "$(booch_claude_plugin_list)"
+}
+# 表示用の出力でも、導入済みが 0 件で組込みの節が最初の節になったときに拾わない。
+test_claude_plugin_list_fallback_excludes_builtin() {
+  booch_claude_run() {
+    case "$*" in
+    "plugin list --json") return 1 ;;
+    "plugin list") printf '%s\n' \
+      'Built-in plugins:' '' '  ❯ cc-plugin-privacy@builtin' '    Status: ✔ enabled' ;; esac
+  }
+  assert_eq '' "$(booch_claude_plugin_list)"
+}
 # 導入済みが 0 件でセッション限定のものだけがあるとき（表示用の出力ではその節が最初の節になる）も
 # 何も返さない。
 test_claude_plugin_list_session_only_returns_nothing() {

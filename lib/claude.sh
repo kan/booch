@@ -222,6 +222,11 @@ _booch_claude_marked_names() { # claude-subcommand...
 # 読み込まれたプラグインは config dir に導入されたものではなく、表示用の出力では
 # "Session-only plugins" の節に並ぶ。導入済みが 0 件だとその節が最初の節になり、「最初の節だけ」を
 # 読む表示用の解析では除けない。jq が無いか `--json` を持たない古い CLI のときだけ表示用の出力から拾う。
+#
+# Claude Code 本体に同梱の組込みプラグイン（`<name>@builtin`）も除く。`--json` は組込みも
+# `scope: "user"` で返すので scope では区別できず、`plugin uninstall` は "not installed" で失敗する。
+# 数えると autoremove が消せない候補を毎回出す。表示用の出力でも、導入済みが 0 件だと
+# "Built-in plugins" の節が最初の節になりうるので、どちらの経路でも id の接尾辞で落とす。
 booch_claude_plugin_list() {
   local json
   if command -v jq >/dev/null 2>&1 &&
@@ -229,7 +234,7 @@ booch_claude_plugin_list() {
     printf '%s\n' "$json" | jq -r '.[] | select(.scope != "session") | .id'
   else
     _booch_claude_marked_names plugin list
-  fi
+  fi | awk '!/@builtin$/'
 }
 
 # プラグインをアンインストールする（成功で 0）。
