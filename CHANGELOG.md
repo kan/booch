@@ -5,6 +5,8 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 
 ## [Unreleased]
 
+## [1.21.2] - 2026-11-26
+
 ### Fixed
 
 - `booch_claude_plugin_list` が、Claude Code 本体に同梱の組込みプラグイン（`<name>@builtin`）も導入済みとして
@@ -742,6 +744,7 @@ booch の変更履歴。書式は [Keep a Changelog](https://keepachangelog.com/
 - ドキュメント: README.md / CLAUDE.md / SECURITY.md、`VERSION`、外部依存のないユニット
   テストとランナースモーク、GitHub Actions（構文 / shellcheck / テスト / スモーク）
 
+[1.21.2]: https://github.com/kan/booch/releases/tag/v1.21.2
 [1.21.1]: https://github.com/kan/booch/releases/tag/v1.21.1
 [1.21.0]: https://github.com/kan/booch/releases/tag/v1.21.0
 [1.20.0]: https://github.com/kan/booch/releases/tag/v1.20.0
